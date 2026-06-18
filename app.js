@@ -1055,33 +1055,50 @@ document.addEventListener('DOMContentLoaded', () => {
         container.innerHTML = '';
         document.getElementById('exam-result-score').value = '';
 
-        if(type === 'Branş') {
-            container.innerHTML = `
-                <div class="input-group" style="flex: 1; min-width: 100px;">
-                    <label>Net</label>
-                    <input type="number" class="sub-net-input" data-subject="Net" placeholder="0" step="0.25">
+        const renderSubjectInput = (subLabel) => {
+            return `
+                <div class="exam-subject-block" style="flex: 1; min-width: 130px; background: rgba(255,255,255,0.7); padding: 0.75rem; border-radius: 8px; border: 1px solid #cbd5e1; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                    <label style="font-weight: bold; margin-bottom: 0.5rem; display: block; color: #1e293b; text-align: center;">${subLabel}</label>
+                    <div style="display: flex; gap: 5px;">
+                        <input type="number" class="sub-d-input" data-subject="${subLabel}" placeholder="Doğru" min="0" style="width: 100%; padding: 0.25rem; border-radius: 4px; border: 1px solid #22c55e; text-align: center;" title="Doğru Sayısı">
+                        <input type="number" class="sub-y-input" data-subject="${subLabel}" placeholder="Yanlış" min="0" style="width: 100%; padding: 0.25rem; border-radius: 4px; border: 1px solid #ef4444; text-align: center;" title="Yanlış Sayısı">
+                    </div>
+                    <div style="text-align: center; margin-top: 8px; font-size: 0.85rem; font-weight: bold; color: var(--primary-color);">Net: <span class="sub-net-display" data-subject="${subLabel}">0.00</span></div>
                 </div>
             `;
+        };
+
+        if(type === 'Branş') {
+            container.innerHTML = renderSubjectInput('Branş');
         } else {
             let subjects = EXAM_SUBJECTS[type];
             subjects.forEach(sub => {
-                container.innerHTML += `
-                    <div class="input-group" style="flex: 1; min-width: 80px;">
-                        <label>${sub}</label>
-                        <input type="number" class="sub-net-input" data-subject="${sub}" placeholder="0" step="0.25">
-                    </div>
-                `;
+                container.innerHTML += renderSubjectInput(sub);
             });
         }
 
-        document.querySelectorAll('.sub-net-input').forEach(inp => {
-            inp.addEventListener('input', () => {
-                let total = 0;
-                document.querySelectorAll('.sub-net-input').forEach(i => {
-                    total += parseFloat(i.value) || 0;
-                });
-                document.getElementById('exam-result-score').value = total;
+        const calculateNets = () => {
+            let totalNet = 0;
+            const blocks = container.querySelectorAll('.exam-subject-block');
+            blocks.forEach(block => {
+                const dInput = block.querySelector('.sub-d-input');
+                const yInput = block.querySelector('.sub-y-input');
+                const netDisplay = block.querySelector('.sub-net-display');
+                
+                const d = parseInt(dInput.value) || 0;
+                const y = parseInt(yInput.value) || 0;
+                const net = d - (y / 4);
+                
+                // Show 0 if net is negative, or actual net.
+                let displayNet = net > 0 ? net : 0;
+                netDisplay.textContent = displayNet.toFixed(2);
+                totalNet += displayNet;
             });
+            document.getElementById('exam-result-score').value = totalNet.toFixed(2);
+        };
+
+        container.querySelectorAll('input[type="number"]').forEach(inp => {
+            inp.addEventListener('input', calculateNets);
         });
     }
 
@@ -1105,8 +1122,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if(type === 'Branş' && !branch) return;
 
         const subScores = {};
-        document.querySelectorAll('.sub-net-input').forEach(i => {
-            if(i.value) subScores[i.getAttribute('data-subject')] = parseFloat(i.value);
+        document.querySelectorAll('.exam-subject-block').forEach(block => {
+            const dInput = block.querySelector('.sub-d-input');
+            const sub = dInput.getAttribute('data-subject');
+            const netDisplay = block.querySelector('.sub-net-display');
+            const net = parseFloat(netDisplay.textContent) || 0;
+            
+            // Only save if they entered something
+            if(dInput.value || block.querySelector('.sub-y-input').value) {
+                subScores[sub] = net;
+            }
         });
 
         if(!studentData.examResults) studentData.examResults = [];
@@ -1124,7 +1149,8 @@ document.addEventListener('DOMContentLoaded', () => {
         
         document.getElementById('exam-result-score').value = '';
         document.getElementById('exam-result-branch-name').value = '';
-        document.querySelectorAll('.sub-net-input').forEach(i => i.value = '');
+        document.querySelectorAll('.sub-d-input, .sub-y-input').forEach(i => i.value = '');
+        document.querySelectorAll('.sub-net-display').forEach(d => d.textContent = '0.00');
         alert('Deneme sonucun kaydedildi!');
     });
 
