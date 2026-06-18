@@ -930,6 +930,10 @@ input[type=range]::-webkit-slider-thumb {
         gap: 0.75rem;
     }
 
+    .two-cols > div {
+        grid-column: span 1 !important;
+    }
+
     input, select {
         padding: 0.75rem;
         font-size: 0.9rem;
