@@ -38,6 +38,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (data) {
             studentData = JSON.parse(data);
             if(!studentData.taskQueue) studentData.taskQueue = [];
+            if(!studentData.topicProgress) studentData.topicProgress = {};
             
             headerUserInfo.classList.remove('hidden');
             headerName.textContent = studentData.name;
@@ -229,6 +230,7 @@ document.addEventListener('DOMContentLoaded', () => {
             history: isUpdate ? studentData.history : [],
             completedTopics: isUpdate ? studentData.completedTopics : {}, 
             spacedRepetitionDone: isUpdate ? studentData.spacedRepetitionDone : {},
+            topicProgress: isUpdate ? (studentData.topicProgress || {}) : {},
             lastLoginDate: isUpdate ? studentData.lastLoginDate : ''
         };
         
@@ -315,6 +317,22 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('prob-duration').value = studentData.settings.probDur || 30;
         document.getElementById('routine-time').value = studentData.settings.routineTime || 'morning';
         
+        if (studentData.settings.exams && studentData.settings.exams.general) {
+            const gen = studentData.settings.exams.general;
+            if (gen.tyt) {
+                document.getElementById('exam-tyt-freq').value = gen.tyt.freq || 'none';
+                document.getElementById('exam-tyt-day').value = gen.tyt.day || '0';
+            }
+            if (gen.ayt) {
+                document.getElementById('exam-ayt-freq').value = gen.ayt.freq || 'none';
+                document.getElementById('exam-ayt-day').value = gen.ayt.day || '0';
+            }
+            if (gen.ydt) {
+                document.getElementById('exam-ydt-freq').value = gen.ydt.freq || 'none';
+                document.getElementById('exam-ydt-day').value = gen.ydt.day || '0';
+            }
+        }
+
         document.getElementById('schedule-type').dispatchEvent(new Event('change'));
         document.getElementById('split-day').dispatchEvent(new Event('change'));
         
@@ -342,18 +360,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
         branches.forEach(branch => {
             let safeId = branch.replace(/[\s\W]+/g, '-').toLowerCase();
+            
+            let freqVal = 'none';
+            let durVal = '';
+            if (window.studentData && window.studentData.settings && window.studentData.settings.exams && window.studentData.settings.exams.branches) {
+                let existing = window.studentData.settings.exams.branches.find(b => b.name === branch);
+                if (existing) {
+                    freqVal = existing.freq.toString();
+                    durVal = existing.dur > 0 ? existing.dur : '';
+                }
+            }
+
             let html = `
                 <div class="input-group" style="background: rgba(0,0,0,0.03); padding: 0.5rem; border-radius: 8px;">
                     <label style="font-size: 0.8rem; font-weight: bold; margin-bottom: 0.25rem; display: block;">${branch}</label>
                     <select id="branch-freq-${safeId}" class="branch-freq-select" data-branch="${branch}" style="padding: 0.4rem; font-size: 0.8rem; margin-bottom: 0.25rem;">
-                        <option value="none">Yok</option>
-                        <option value="1">Her gün</option>
-                        <option value="2">2 günde 1</option>
-                        <option value="3">3 günde 1</option>
-                        <option value="4">4 günde 1</option>
-                        <option value="7">Haftada 1</option>
+                        <option value="none" ${freqVal === 'none' ? 'selected' : ''}>Yok</option>
+                        <option value="1" ${freqVal === '1' ? 'selected' : ''}>Her gün</option>
+                        <option value="2" ${freqVal === '2' ? 'selected' : ''}>2 günde 1</option>
+                        <option value="3" ${freqVal === '3' ? 'selected' : ''}>3 günde 1</option>
+                        <option value="4" ${freqVal === '4' ? 'selected' : ''}>4 günde 1</option>
+                        <option value="7" ${freqVal === '7' ? 'selected' : ''}>Haftada 1</option>
                     </select>
-                    <input type="number" id="branch-dur-${safeId}" class="branch-dur-input" data-branch="${branch}" placeholder="Süre (dk) - Opsiyonel" style="padding: 0.4rem; font-size: 0.8rem;">
+                    <input type="number" id="branch-dur-${safeId}" class="branch-dur-input" data-branch="${branch}" placeholder="Süre (dk) - Opsiyonel" value="${durVal}" style="padding: 0.4rem; font-size: 0.8rem;">
                 </div>
             `;
             container.innerHTML += html;
@@ -399,8 +428,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 topics.forEach(topic => {
                     let isChecked = true;
+                    let partialProg = 0;
                     if(!forWizard) {
-                        isChecked = studentData.completedTopics[`${subject}: ${topic}`] !== undefined;
+                        const fullTopicName = `${subject}: ${topic}`;
+                        isChecked = studentData.completedTopics[fullTopicName] !== undefined;
+                        if (!isChecked && studentData.topicProgress && studentData.topicProgress[fullTopicName]) {
+                            partialProg = studentData.topicProgress[fullTopicName];
+                        }
                     }
 
                     const label = document.createElement('label');
@@ -414,8 +448,18 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     }
 
-                    label.innerHTML = `<input type="checkbox" ${isChecked ? 'checked' : ''} data-cat="${cat}" data-subject="${subject}" value="${topic}"> ${topic}${qCountText}`;
-                    if(qCountText !== '') {
+                    let progHtml = '';
+                    if (!forWizard && !isChecked && partialProg > 0) {
+                        progHtml = `
+                            <div style="width: 50px; height: 6px; background: #e2e8f0; border-radius: 3px; margin-left: 10px; overflow: hidden; display: inline-block; vertical-align: middle;">
+                                <div style="width: ${partialProg}%; height: 100%; background: #3b82f6;"></div>
+                            </div>
+                            <span style="font-size: 0.7rem; color: #64748b; margin-left: 5px;">%${partialProg}</span>
+                        `;
+                    }
+
+                    label.innerHTML = `<input type="checkbox" ${isChecked ? 'checked' : ''} data-cat="${cat}" data-subject="${subject}" value="${topic}"> <span style="margin-left: 4px;">${topic}</span>${progHtml}${qCountText}`;
+                    if(qCountText !== '' || progHtml !== '') {
                         label.style.display = 'flex';
                         label.style.alignItems = 'center';
                     }
@@ -425,9 +469,13 @@ document.addEventListener('DOMContentLoaded', () => {
                             const fullTopicName = `${subject}: ${topic}`;
                             if(e.target.checked) {
                                 studentData.completedTopics[fullTopicName] = Date.now();
+                                studentData.topicProgress[fullTopicName] = 100;
                                 removeTopicFromQueueAndToday(fullTopicName);
                             } else {
                                 delete studentData.completedTopics[fullTopicName];
+                                if (studentData.topicProgress[fullTopicName] === 100) {
+                                    studentData.topicProgress[fullTopicName] = 99;
+                                }
                             }
                             saveData();
                             updateOverallProgress();
@@ -510,11 +558,29 @@ document.addEventListener('DOMContentLoaded', () => {
                         if(!studentData.questionCounts[baseName]) studentData.questionCounts[baseName] = 0;
                         studentData.questionCounts[baseName] += parseInt(t.qCount);
                     }
+                    if (t.progress !== undefined) {
+                        t.progress = 100;
+                        studentData.topicProgress[t.text] = 100;
+                    }
                 });
 
                 studentData.history.push({
                     date: studentData.lastLoginDate || new Date().toISOString().split('T')[0],
                     tasks: completed
+                });
+            }
+            
+            // Handle partial progress for unfinished tasks
+            const partialTasks = unfinished.filter(t => t.progress > 0 && t.progress < 100 && !t.text.includes('Paragraf') && !t.text.includes('Problem') && !t.text.includes('Tekrar Testi'));
+            if (partialTasks.length > 0) {
+                // If there's partial progress, also log it in history
+                studentData.history.push({
+                    date: studentData.lastLoginDate || new Date().toISOString().split('T')[0],
+                    tasks: partialTasks.map(t => ({ ...t, isPartial: true }))
+                });
+                // Also save the progress state
+                partialTasks.forEach(t => {
+                    studentData.topicProgress[t.text] = t.progress;
                 });
             }
             
@@ -835,6 +901,11 @@ document.addEventListener('DOMContentLoaded', () => {
             
             let showQInput = task.text.includes('Soru Çözümü') || task.text.includes('Paragraf') || task.text.includes('Problem') || task.text.includes('Tekrar');
             
+            let showSlider = !showQInput && task.text.includes(': ') && !task.text.includes('Denemesi') && !task.text.includes('Tekrar');
+            let progressVal = task.progress !== undefined ? task.progress : (studentData.topicProgress[task.text] || 0);
+            if (task.done) progressVal = 100;
+            task.progress = progressVal;
+
             let qInputHtml = '';
             if (showQInput) {
                 qInputHtml = `
@@ -843,13 +914,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>`;
             }
 
+            let sliderHtml = '';
+            if (showSlider) {
+                sliderHtml = `
+                <div class="task-progress-container" style="width: 100%; margin-top: 8px; display: flex; align-items: center; gap: 10px;">
+                    <input type="range" class="task-progress-slider" min="0" max="100" value="${progressVal}" style="flex-grow: 1; accent-color: #3b82f6;">
+                    <span class="task-progress-label" style="font-size: 0.8rem; font-weight: bold; color: #64748b; width: 40px; text-align: right;">%${progressVal}</span>
+                </div>`;
+            }
+
             li.innerHTML = `
                 <div class="drag-handle">☰</div>
                 <div class="task-checkbox"></div>
-                <div style="flex-grow: 1;">
-                    ${timeBadgeHtml}
-                    <div class="task-text">${task.text}</div>
-                    <span class="tag tag-${task.tag}">${task.tag.toUpperCase()}</span>
+                <div style="flex-grow: 1; display: flex; flex-direction: column;">
+                    <div style="display: flex; align-items: center;">
+                        ${timeBadgeHtml}
+                        <div class="task-text">${task.text}</div>
+                        <span class="tag tag-${task.tag}">${task.tag.toUpperCase()}</span>
+                    </div>
+                    ${sliderHtml}
                 </div>
                 ${qInputHtml}
             `;
@@ -862,9 +945,44 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
 
+            if (showSlider) {
+                const slider = li.querySelector('.task-progress-slider');
+                const label = li.querySelector('.task-progress-label');
+                slider.addEventListener('input', (e) => {
+                    const val = parseInt(e.target.value);
+                    label.textContent = '%' + val;
+                    task.progress = val;
+                    studentData.topicProgress[task.text] = val;
+                    
+                    if (val === 100 && !task.done) {
+                        li.querySelector('.task-checkbox').click(); // Auto-check if 100%
+                    } else if (val < 100 && task.done) {
+                        li.querySelector('.task-checkbox').click(); // Auto-uncheck if < 100%
+                    } else {
+                        saveData();
+                    }
+                });
+            }
+
             li.querySelector('.task-checkbox').addEventListener('click', () => {
                 task.done = !task.done;
                 li.classList.toggle('completed');
+                
+                if (showSlider) {
+                    const slider = li.querySelector('.task-progress-slider');
+                    const label = li.querySelector('.task-progress-label');
+                    if (task.done) {
+                        task.progress = 100;
+                        slider.value = 100;
+                        label.textContent = '%100';
+                        studentData.topicProgress[task.text] = 100;
+                    } else if (task.progress === 100) {
+                        task.progress = 99;
+                        slider.value = 99;
+                        label.textContent = '%99';
+                        studentData.topicProgress[task.text] = 99;
+                    }
+                }
                 
                 if(task.done && task.text.includes(': ') && !task.text.includes('Tekrar')) {
                     studentData.completedTopics[task.text] = Date.now();
@@ -1019,7 +1137,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 <ul style="list-style: none; padding-left: 0; font-size: 0.9rem; color: #475569;">
                     ${record.tasks.map(t => {
                         let qText = (t.qCount && parseInt(t.qCount) > 0) ? ` <b style="color:var(--primary-color);">(${t.qCount} Soru)</b>` : '';
-                        return `<li style="margin-bottom:0.25rem;">✓ ${t.text}${qText}</li>`;
+                        let icon = '✓';
+                        let progText = '';
+                        if (t.isPartial) {
+                            icon = '⏳';
+                            progText = ` <span style="font-size: 0.8rem; color: #f59e0b; font-weight: bold;">(%${t.progress} çalışıldı)</span>`;
+                        } else if (t.progress === 100) {
+                            progText = ` <span style="font-size: 0.8rem; color: #22c55e; font-weight: bold;">(Tamamlandı)</span>`;
+                        }
+                        return `<li style="margin-bottom:0.25rem;">${icon} ${t.text}${progText}${qText}</li>`;
                     }).join('')}
                 </ul>
             `;
