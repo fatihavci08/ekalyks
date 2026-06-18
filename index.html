@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YKS Yaz Kampı Yapay Zeka Planlayıcı</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=Outfit:wght@400;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <!-- html2pdf.js for PDF generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <!-- SortableJS for Drag and Drop -->
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+</head>
+<body>
+
+    <div class="background-shapes">
+        <div class="shape shape-1"></div>
+        <div class="shape shape-2"></div>
+        <div class="shape shape-3"></div>
+    </div>
+
+    <main class="app-container">
+        
+        <!-- HEADER -->
+        <header>
+            <div class="logo">
+                <span class="icon">🎓</span>
+                <h1>EKAL 2027 YKS'ye Hazırlanıyor</h1>
+            </div>
+            <div class="header-subtitle">
+                <span>EKAL REHBERLİK SERVİSİ</span>
+            </div>
+            <div class="user-info hidden" id="header-user-info">
+                <span id="header-name">Öğrenci</span>
+                <button id="btn-settings" class="btn-small btn-outline">Ayarlar</button>
+                <button id="btn-reset" class="btn-small btn-outline">Çıkış</button>
+            </div>
+        </header>
+
+        <!-- SCREEN 0: LOGIN -->
+        <section id="screen-login" class="screen active">
+            <div class="glass-card text-center wizard-card" style="max-width: 400px; margin: 0 auto;">
+                <h2 class="title-gradient">Hoş Geldiniz</h2>
+                <p class="subtitle">Kendi planına erişmek için giriş yap veya yeni profil oluştur.</p>
+                <form id="login-form" class="form-grid">
+                    <div class="input-group">
+                        <label for="login-username">Kullanıcı Adı (Sana Özel)</label>
+                        <input type="text" id="login-username" placeholder="Örn: ahmet123" required autocomplete="off">
+                    </div>
+                    <button type="submit" class="btn-primary mt-2 pulse">Giriş Yap / Profil Oluştur</button>
+                </form>
+            </div>
+        </section>
+
+        <!-- SCREEN 1: WELCOME & ONBOARDING WIZARD -->
+        <section id="screen-welcome" class="screen hidden">
+            <div class="glass-card text-center wizard-card">
+                <h2 class="title-gradient">Yapay Zeka Destekli<br>Saatlik Tatil Planlayıcına Hoş Geldin!</h2>
+                
+                <div class="wizard-progress">
+                    <div class="step active" id="step-1-indicator">1. Profil</div>
+                    <div class="step" id="step-2-indicator">2. Zaman</div>
+                    <div class="step" id="step-3-indicator">3. Konular</div>
+                </div>
+
+                <form id="onboarding-form">
+                    <!-- STEP 1 -->
+                    <div id="wizard-step-1" class="wizard-step active">
+                        <p class="subtitle">Önce seni tanıyalım, hedeflerine uygun bir temel oluşturalım.</p>
+                        <div class="form-grid">
+                            <div class="input-group">
+                                <label for="student-name">Adın Ne?</label>
+                                <input type="text" id="student-name" placeholder="Örn: Ahmet" required>
+                            </div>
+                            <div class="input-group">
+                                <label for="student-track">Alanını Seç</label>
+                                <select id="student-track" required>
+                                    <option value="" disabled selected>Seçim yap...</option>
+                                    <option value="tyt">Sadece TYT (2 Yıllık veya TYT hedefi)</option>
+                                    <option value="say">Sayısal (TYT + AYT Fen/Mat)</option>
+                                    <option value="ea">Eşit Ağırlık (TYT + AYT Mat/Ed/Sos1)</option>
+                                    <option value="soz">Sözel (TYT + AYT Ed/Sos1/Sos2)</option>
+                                    <option value="dil">Dil (TYT + YDT)</option>
+                                </select>
+                            </div>
+                            <button type="button" class="btn-primary mt-2" id="btn-next-1" style="grid-column: span 2;">İleri: Çalışma Saatleri ➔</button>
+                        </div>
+                    </div>
+
+                    <!-- STEP 2 -->
+                    <div id="wizard-step-2" class="wizard-step hidden">
+                        <p class="subtitle">Sana özel saatlik bir program yapabilmemiz için rutini belirle.</p>
+                        <div class="form-grid two-cols">
+                            <div class="input-group" style="grid-column: span 2;">
+                                <label for="schedule-type">Nasıl Çalışmak İstersin?</label>
+                                <select id="schedule-type">
+                                    <option value="hourly">Saatlik Çalışma Çizelgesi (Önerilen)</option>
+                                    <option value="flexible">Serbest (Sadece günlük görev listesi ver)</option>
+                                </select>
+                            </div>
+                            <div class="input-group hourly-setting">
+                                <label for="start-time">Güne Kaçta Başlarsın?</label>
+                                <input type="time" id="start-time" value="09:00" required>
+                            </div>
+                            <div class="input-group hourly-setting">
+                                <label for="capacity-hours">Günde Kaç Saat Çalışabilirsin?</label>
+                                <input type="number" id="capacity-hours" value="6" min="1" max="16" required>
+                            </div>
+                            <div class="input-group flexible-setting hidden">
+                                <label for="capacity-subjects">Günde Kaç Farklı Ders Çalışabilirsin?</label>
+                                <input type="number" id="capacity-subjects" value="3" min="1" max="10" required>
+                            </div>
+                            <div class="input-group hourly-setting">
+                                <label for="block-duration">1 Ders (Oturuş) Kaç Dk?</label>
+                                <input type="number" id="block-duration" value="40" min="20" max="120" required>
+                            </div>
+                            <div class="input-group hourly-setting">
+                                <label for="break-duration">Mola Kaç Dk?</label>
+                                <input type="number" id="break-duration" value="10" min="5" max="30" required>
+                            </div>
+                            <div class="input-group hourly-setting">
+                                <label for="split-day">Günü İkiye Bölelim mi?</label>
+                                <select id="split-day">
+                                    <option value="no">Hayır, arka arkaya bitsin</option>
+                                    <option value="yes">Evet, öğleden sonra uzun ara</option>
+                                </select>
+                            </div>
+                            <div class="input-group hidden" id="evening-start-group">
+                                <label for="evening-start-time">Akşam Seansı Kaçta Başlasın?</label>
+                                <input type="time" id="evening-start-time" value="18:00">
+                            </div>
+                            <div class="input-group">
+                                <label>Aşağıdaki hangi rutinleri her gün yapabilirsin?</label>
+                                <input type="number" id="daily-paragraf" placeholder="Paragraf soru sayısı (Örn: 20)" min="0">
+                                <input type="number" id="daily-problem" placeholder="Problem soru sayısı (Örn: 20)" min="0" class="mt-2">
+                            </div>
+                            <div class="input-group hourly-setting">
+                                <label for="para-duration">Paragraf İçin Kaç Dk Süre Verilsin?</label>
+                                <input type="number" id="para-duration" value="30" min="5" max="120" required>
+                            </div>
+                            <div class="input-group hourly-setting">
+                                <label for="prob-duration">Problem İçin Kaç Dk Süre Verilsin?</label>
+                                <input type="number" id="prob-duration" value="30" min="5" max="120" required>
+                            </div>
+                            <div class="input-group" style="grid-column: span 2;">
+                                <label for="routine-time">Rutinler (Prgf/Prob) Ne Zaman?</label>
+                                <select id="routine-time">
+                                    <option value="morning">Sabah İlk İş (Önerilir)</option>
+                                    <option value="evening">Günün Sonunda</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="wizard-actions mt-2">
+                            <button type="button" class="btn-outline" id="btn-prev-2">⬅ Geri</button>
+                            <button type="button" class="btn-primary" id="btn-next-2">İleri: Konu Seçimi ➔</button>
+                        </div>
+                    </div>
+
+                    <!-- STEP 3 -->
+                    <div id="wizard-step-3" class="wizard-step hidden">
+                        <p class="subtitle">Programa eklemek <b>istemediğin DERSLERİN</b> veya bitirdiğin <b>KONULARIN</b> işaretini kaldır.</p>
+                        
+                        <div id="topic-selection-container" class="topic-accordion-container">
+                            <!-- JS will populate accordions here based on track -->
+                        </div>
+
+                        <div class="wizard-actions mt-2">
+                            <button type="button" class="btn-outline" id="btn-prev-3">⬅ Geri</button>
+                            <button type="submit" class="btn-primary pulse">🚀 Programı Oluştur!</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </section>
+
+        <!-- SCREEN 2: CHAT / EVALUATION -->
+        <section id="screen-chat" class="screen hidden">
+            <div class="glass-card">
+                <h2 class="title-gradient">Haftalık Değerlendirme</h2>
+                <div class="chat-box" id="chat-box">
+                    <div class="message ai-message">
+                        <div class="avatar">🤖</div>
+                        <div class="text">
+                            Merhaba <span id="chat-name"></span>! Geçen haftaki programını ne kadar uygulayabildin? Eksik kalan konularını yeni haftaya ekleyelim mi?
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="evaluation-controls">
+                    <p>Geçen hafta sana verdiğim görevlerin yüzde kaçını tamamladın?</p>
+                    <input type="range" id="completion-range" min="0" max="100" value="50">
+                    <div class="range-labels">
+                        <span>%0</span>
+                        <span id="range-value">%50</span>
+                        <span>%100</span>
+                    </div>
+                    <button id="btn-evaluate" class="btn-primary">Haftayı Tamamla ve Yeni Programı Gör 📅</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- SCREEN 3: PROGRAM VIEW (TODAY) -->
+        <section id="screen-program" class="screen hidden tab-content">
+            <div class="action-bar">
+                <button id="btn-advance-task" class="btn-outline">⚡ Daha Fazla Görev Çek</button>
+                <button id="btn-end-day" class="btn-primary">✅ Günü Bitir</button>
+            </div>
+
+            <div class="glass-card">
+                <div class="program-header">
+                    <h2 class="title-gradient">Bugünün Görevleri</h2>
+                </div>
+
+                <div id="program-container" class="program-grid">
+                    <!-- Today's tasks will be rendered here by JS -->
+                </div>
+            </div>
+        </section>
+
+        <!-- SCREEN 3.5: WEEKLY VIEW (HAFTALIK) -->
+        <section id="screen-weekly" class="screen hidden tab-content">
+            <div class="action-bar">
+                <button id="btn-download-pdf" class="btn-primary">🖨️ Programı Yazdır / PDF Kaydet</button>
+            </div>
+
+            <div class="glass-card" id="pdf-content">
+                <div class="pdf-header hidden-in-web" style="position: relative;">
+                    <h2><span id="pdf-student-name"></span> - Haftalık Plan</h2>
+                    <p id="pdf-date-range" style="font-weight: bold; margin: 5px 0; color: var(--primary-color);"></p>
+                    <p>Alan: <span id="pdf-student-track"></span> | Seviye: <span id="pdf-student-level"></span></p>
+                </div>
+
+                <div class="program-header">
+                    <h2 class="title-gradient">Muhtemel 7 Günlük Programın</h2>
+                    <p class="subtitle">Sen ilerledikçe veya günü bitirdikçe bu liste anlık olarak güncellenecektir.</p>
+                </div>
+
+                <div id="weekly-container" class="program-grid">
+                    <!-- Weekly schedule will be rendered here by JS -->
+                </div>
+                
+                <p class="countdown" style="text-align: center; margin-top: 2rem; font-size: 1.05rem; color: var(--primary-color);">
+                    YKS'ye Kalan Tahmini Süre: <strong id="days-left"></strong> Gün<br>
+                    <small style="font-size: 0.85rem; color: #64748b;">(Sınav tarihi 19-20 Haziran olarak baz alınmıştır)</small>
+                </p>
+
+                <div class="pdf-footer hidden-in-web">
+                    EKAL REHBERLİK SERVİSİ
+                </div>
+            </div>
+        </section>
+
+        <!-- SCREEN 4: PROGRESS (İLERLEMEM) -->
+        <section id="screen-progress" class="screen hidden tab-content">
+            <div class="glass-card">
+                <h2 class="title-gradient">İlerlemem & Bitirdiğim Konular</h2>
+                <p class="subtitle">Bitirdiğin konuları buradan işaretle. Sistem sana uygun aralıklarla tekrar testi önerecektir!</p>
+                <div class="progress-container">
+                    <div class="progress-bar" id="overall-progress" style="width: 0%;"></div>
+                </div>
+                <div id="progress-accordion-container" class="topic-accordion-container" style="max-height: none;">
+                    <!-- JS will populate accordions here based on track -->
+                </div>
+                <button id="btn-sync-progress" class="btn-primary mt-2 pulse" style="width: 100%;">Durumu Kaydet & Programı Güncelle</button>
+            </div>
+        </section>
+
+        <!-- SCREEN 5: HISTORY (GEÇMİŞİM) -->
+        <section id="screen-history" class="screen hidden tab-content">
+            <div class="glass-card">
+                <h2 class="title-gradient">Geçmişim</h2>
+                <p class="subtitle">Geçtiğimiz günlerdeki performansın.</p>
+                <div id="history-container">
+                    <!-- JS will populate history here -->
+                </div>
+            </div>
+        </section>
+
+        <!-- BOTTOM NAVIGATION BAR -->
+        <nav id="bottom-nav" class="bottom-nav hidden">
+            <button class="nav-item active" data-target="screen-program">
+                <span class="nav-icon">📅</span>
+                <span>Bugün</span>
+            </button>
+            <button class="nav-item" data-target="screen-weekly">
+                <span class="nav-icon">🗓️</span>
+                <span>Haftalık</span>
+            </button>
+            <button class="nav-item" data-target="screen-progress">
+                <span class="nav-icon">📈</span>
+                <span>İlerlemem</span>
+            </button>
+            <button class="nav-item" data-target="screen-history">
+                <span class="nav-icon">📜</span>
+                <span>Geçmişim</span>
+            </button>
+        </nav>
+
+    </main>
+
+    <script src="topics.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
