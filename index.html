@@ -160,6 +160,89 @@
 
                     <!-- STEP 3 -->
                     <div id="wizard-step-3" class="wizard-step hidden">
+                        <div class="topic-accordion-container" style="margin-bottom: 2rem;">
+                            <div class="accordion-item" id="accordion-exams">
+                                <div class="accordion-header" onclick="this.nextElementSibling.classList.toggle('open')">
+                                    <span>📝 Deneme Ekle (Genel & Branş)</span>
+                                    <span class="icon">▼</span>
+                                </div>
+                                <div class="accordion-body">
+                                    <p class="subtitle" style="margin-bottom: 1rem; font-size: 0.85rem;">Haftalık programına eklenecek denemeleri seç. (Genel deneme süreleri sabittir: TYT 165dk, AYT 180dk, YDT 120dk)</p>
+                                    
+                                    <h4 style="margin-top: 0.5rem; margin-bottom: 0.5rem; color: var(--primary-color);">Genel Denemeler</h4>
+                                    <div class="form-grid two-cols" style="gap: 0.5rem;">
+                                        <div class="input-group">
+                                            <label style="font-size: 0.8rem;">TYT Genel Denemesi</label>
+                                            <select id="exam-tyt-freq" style="padding: 0.5rem; font-size: 0.85rem;">
+                                                <option value="none">Yok</option>
+                                                <option value="weekly">Haftada 1</option>
+                                                <option value="biweekly">İki Haftada 1</option>
+                                            </select>
+                                        </div>
+                                        <div class="input-group">
+                                            <label style="font-size: 0.8rem;">Hangi Gün?</label>
+                                            <select id="exam-tyt-day" style="padding: 0.5rem; font-size: 0.85rem;">
+                                                <option value="0">Pazar</option>
+                                                <option value="1">Pazartesi</option>
+                                                <option value="2">Salı</option>
+                                                <option value="3">Çarşamba</option>
+                                                <option value="4">Perşembe</option>
+                                                <option value="5">Cuma</option>
+                                                <option value="6">Cumartesi</option>
+                                            </select>
+                                        </div>
+                                        
+                                        <div class="input-group">
+                                            <label style="font-size: 0.8rem;">AYT Genel Denemesi</label>
+                                            <select id="exam-ayt-freq" style="padding: 0.5rem; font-size: 0.85rem;">
+                                                <option value="none">Yok</option>
+                                                <option value="weekly">Haftada 1</option>
+                                                <option value="biweekly">İki Haftada 1</option>
+                                            </select>
+                                        </div>
+                                        <div class="input-group">
+                                            <label style="font-size: 0.8rem;">Hangi Gün?</label>
+                                            <select id="exam-ayt-day" style="padding: 0.5rem; font-size: 0.85rem;">
+                                                <option value="0">Pazar</option>
+                                                <option value="1">Pazartesi</option>
+                                                <option value="2">Salı</option>
+                                                <option value="3">Çarşamba</option>
+                                                <option value="4">Perşembe</option>
+                                                <option value="5">Cuma</option>
+                                                <option value="6">Cumartesi</option>
+                                            </select>
+                                        </div>
+
+                                        <div class="input-group">
+                                            <label style="font-size: 0.8rem;">YDT Denemesi</label>
+                                            <select id="exam-ydt-freq" style="padding: 0.5rem; font-size: 0.85rem;">
+                                                <option value="none">Yok</option>
+                                                <option value="weekly">Haftada 1</option>
+                                                <option value="biweekly">İki Haftada 1</option>
+                                            </select>
+                                        </div>
+                                        <div class="input-group">
+                                            <label style="font-size: 0.8rem;">Hangi Gün?</label>
+                                            <select id="exam-ydt-day" style="padding: 0.5rem; font-size: 0.85rem;">
+                                                <option value="0">Pazar</option>
+                                                <option value="1">Pazartesi</option>
+                                                <option value="2">Salı</option>
+                                                <option value="3">Çarşamba</option>
+                                                <option value="4">Perşembe</option>
+                                                <option value="5">Cuma</option>
+                                                <option value="6">Cumartesi</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem; color: var(--secondary-color);">Branş Denemeleri</h4>
+                                    <div id="branch-exams-container" class="form-grid two-cols" style="gap: 0.5rem;">
+                                        <!-- JS will populate -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <p class="subtitle">Programa eklemek <b>istemediğin DERSLERİN</b> veya bitirdiğin <b>KONULARIN</b> işaretini kaldır.</p>
                         
                         <div id="topic-selection-container" class="topic-accordion-container">
@@ -278,6 +361,72 @@
             </div>
         </section>
 
+        <!-- SCREEN 6: EXAM RESULTS (DENEMELERİM) -->
+        <section id="screen-exams" class="screen hidden tab-content">
+            <div class="glass-card">
+                <h2 class="title-gradient">Deneme Sonuçlarım</h2>
+                <p class="subtitle">Çözdüğün denemelerin netlerini girerek gelişimini takip et.</p>
+                
+                <div class="form-grid two-cols" style="background: rgba(255,255,255,0.5); padding: 1rem; border-radius: 12px; margin-bottom: 2rem;">
+                    <div class="input-group">
+                        <label>Deneme Türü</label>
+                        <select id="exam-result-type">
+                            <option value="TYT">TYT Genel</option>
+                            <option value="AYT">AYT Genel</option>
+                            <option value="YDT">YDT</option>
+                            <option value="Branş">Branş Denemesi</option>
+                        </select>
+                    </div>
+                    <div class="input-group hidden" id="exam-result-branch-group">
+                        <label>Hangi Branş?</label>
+                        <select id="exam-result-branch-name">
+                            <option value="">Seçiniz...</option>
+                            <optgroup label="TYT Branşları">
+                                <option value="TYT Türkçe">TYT Türkçe</option>
+                                <option value="TYT Matematik">TYT Matematik</option>
+                                <option value="TYT Sosyal">TYT Sosyal</option>
+                                <option value="TYT Fen">TYT Fen</option>
+                            </optgroup>
+                            <optgroup label="AYT Branşları">
+                                <option value="AYT Matematik">AYT Matematik</option>
+                                <option value="AYT Edebiyat">AYT Edebiyat</option>
+                                <option value="AYT Tarih-1">AYT Tarih-1</option>
+                                <option value="AYT Coğrafya-1">AYT Coğrafya-1</option>
+                                <option value="AYT Fizik">AYT Fizik</option>
+                                <option value="AYT Kimya">AYT Kimya</option>
+                                <option value="AYT Biyoloji">AYT Biyoloji</option>
+                                <option value="AYT Tarih-2">AYT Tarih-2</option>
+                                <option value="AYT Coğrafya-2">AYT Coğrafya-2</option>
+                                <option value="AYT Felsefe">AYT Felsefe Grubu</option>
+                                <option value="AYT Din">AYT Din Kültürü</option>
+                            </optgroup>
+                            <optgroup label="YDT">
+                                <option value="YDT İngilizce">YDT İngilizce</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                    
+                    <div id="dynamic-net-inputs" style="grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 10px;">
+                        <!-- JS will inject inputs here based on Exam Type -->
+                    </div>
+
+                    <div class="input-group" style="grid-column: 1 / -1; margin-top: 10px;">
+                        <label>Toplam Net (Otomatik)</label>
+                        <input type="number" id="exam-result-score" placeholder="0" step="0.25" readonly style="background:#f1f5f9; cursor:not-allowed; font-weight:bold;">
+                    </div>
+                    
+                    <div class="input-group" style="grid-column: 1 / -1;">
+                        <label>&nbsp;</label>
+                        <button id="btn-save-exam-result" class="btn-primary" style="padding: 0.75rem;">Sonucu Kaydet</button>
+                    </div>
+                </div>
+
+                <div id="exam-results-container">
+                    <!-- JS will populate past exams here -->
+                </div>
+            </div>
+        </section>
+
         <!-- BOTTOM NAVIGATION BAR -->
         <nav id="bottom-nav" class="bottom-nav hidden">
             <button class="nav-item active" data-target="screen-program">
@@ -293,8 +442,12 @@
                 <span>İlerlemem</span>
             </button>
             <button class="nav-item" data-target="screen-history">
-                <span class="nav-icon">📜</span>
-                <span>Geçmişim</span>
+                <span class="nav-icon">🕰️</span>
+                <span>Geçmiş</span>
+            </button>
+            <button class="nav-item" data-target="screen-exams">
+                <span class="nav-icon">📈</span>
+                <span>Denemeler</span>
             </button>
         </nav>
 

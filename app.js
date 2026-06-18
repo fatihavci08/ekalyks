@@ -121,7 +121,9 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('btn-next-2').addEventListener('click', () => {
         step2.classList.add('hidden'); step3.classList.remove('hidden');
         ind2.classList.remove('active'); ind3.classList.add('active');
-        buildTopicAccordion(document.getElementById('student-track').value, 'topic-selection-container', true);
+        const track = document.getElementById('student-track').value;
+        buildTopicAccordion(track, 'topic-selection-container', true);
+        buildBranchExams(track);
     });
 
     document.getElementById('btn-prev-3').addEventListener('click', () => {
@@ -149,8 +151,40 @@ document.addEventListener('DOMContentLoaded', () => {
             probGoal: parseInt(document.getElementById('daily-problem').value) || 0,
             paraDur: parseInt(document.getElementById('para-duration').value) || 30,
             probDur: parseInt(document.getElementById('prob-duration').value) || 30,
-            routineTime: document.getElementById('routine-time').value
+            routineTime: document.getElementById('routine-time').value,
+            exams: {
+                general: {
+                    tyt: { freq: document.getElementById('exam-tyt-freq').value, day: parseInt(document.getElementById('exam-tyt-day').value) },
+                    ayt: { freq: document.getElementById('exam-ayt-freq').value, day: parseInt(document.getElementById('exam-ayt-day').value) },
+                    ydt: { freq: document.getElementById('exam-ydt-freq').value, day: parseInt(document.getElementById('exam-ydt-day').value) }
+                },
+                branches: []
+            }
         };
+
+        const gen = settings.exams.general;
+        let overlapWarning = '';
+        if (gen.tyt.freq !== 'none' && gen.ayt.freq !== 'none' && gen.tyt.day === gen.ayt.day) {
+            overlapWarning = "TYT ve AYT genel denemelerini aynı güne seçtiniz.\nBu durum bazı haftalarda iki ağır denemenin aynı güne (üst üste) denk gelmesine yol açacaktır.\n\nYine de bu şekilde devam etmek istiyor musunuz?";
+        } else if (gen.tyt.freq !== 'none' && gen.ydt.freq !== 'none' && gen.tyt.day === gen.ydt.day) {
+            overlapWarning = "TYT ve YDT genel denemelerini aynı güne seçtiniz.\nBu durum bazı haftalarda iki denemenin aynı güne (üst üste) denk gelmesine yol açacaktır.\n\nYine de bu şekilde devam etmek istiyor musunuz?";
+        }
+
+        if (overlapWarning !== '') {
+            if (!confirm(overlapWarning)) {
+                return; // Kullanıcı iptal etti
+            }
+        }
+
+        document.querySelectorAll('.branch-freq-select').forEach(sel => {
+            if (sel.value !== 'none') {
+                const branchName = sel.getAttribute('data-branch');
+                const safeId = branchName.replace(/[\s\W]+/g, '-').toLowerCase();
+                const durInput = document.getElementById(`branch-dur-${safeId}`);
+                let dur = parseInt(durInput.value) || 0; // 0 means use default block duration
+                settings.exams.branches.push({ name: branchName, freq: parseInt(sel.value), dur: dur });
+            }
+        });
 
         const customPool = extractSelectedTopics('topic-selection-container');
         let isUpdate = studentData && studentData.name;
@@ -293,6 +327,39 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- ACCORDION ---
+    function buildBranchExams(track) {
+        const container = document.getElementById('branch-exams-container');
+        if (!container) return;
+        container.innerHTML = '';
+        
+        let branches = ['TYT Türkçe', 'TYT Matematik', 'TYT Sosyal', 'TYT Fen'];
+        if (track === 'say') branches.push('AYT Matematik', 'AYT Fizik', 'AYT Kimya', 'AYT Biyoloji');
+        if (track === 'ea') branches.push('AYT Türk Dili ve Edebiyatı', 'AYT Tarih-1', 'AYT Coğrafya-1', 'AYT Matematik');
+        if (track === 'soz') branches.push('AYT Türk Dili ve Edebiyatı', 'AYT Tarih-1', 'AYT Coğrafya-1', 'AYT Tarih-2', 'AYT Coğrafya-2', 'AYT Felsefe', 'AYT Din Kültürü');
+        if (track === 'dil') branches.push('YDT İngilizce');
+
+        branches = [...new Set(branches)];
+
+        branches.forEach(branch => {
+            let safeId = branch.replace(/[\s\W]+/g, '-').toLowerCase();
+            let html = `
+                <div class="input-group" style="background: rgba(0,0,0,0.03); padding: 0.5rem; border-radius: 8px;">
+                    <label style="font-size: 0.8rem; font-weight: bold; margin-bottom: 0.25rem; display: block;">${branch}</label>
+                    <select id="branch-freq-${safeId}" class="branch-freq-select" data-branch="${branch}" style="padding: 0.4rem; font-size: 0.8rem; margin-bottom: 0.25rem;">
+                        <option value="none">Yok</option>
+                        <option value="1">Her gün</option>
+                        <option value="2">2 günde 1</option>
+                        <option value="3">3 günde 1</option>
+                        <option value="4">4 günde 1</option>
+                        <option value="7">Haftada 1</option>
+                    </select>
+                    <input type="number" id="branch-dur-${safeId}" class="branch-dur-input" data-branch="${branch}" placeholder="Süre (dk) - Opsiyonel" style="padding: 0.4rem; font-size: 0.8rem;">
+                </div>
+            `;
+            container.innerHTML += html;
+        });
+    }
+
     function buildTopicAccordion(track, containerId, forWizard) {
         const container = document.getElementById(containerId);
         container.innerHTML = '';
@@ -338,7 +405,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     const label = document.createElement('label');
                     label.className = 'topic-checkbox';
-                    label.innerHTML = `<input type="checkbox" ${isChecked ? 'checked' : ''} data-cat="${cat}" data-subject="${subject}" value="${topic}"> ${topic}`;
+                    
+                    let qCountText = '';
+                    if(!forWizard && studentData.questionCounts) {
+                        const fullTopicName = `${subject}: ${topic}`;
+                        if(studentData.questionCounts[fullTopicName]) {
+                            qCountText = ` <span style="font-size: 0.75rem; color: var(--primary-color); font-weight: bold; margin-left: auto;">(${studentData.questionCounts[fullTopicName]} Soru)</span>`;
+                        }
+                    }
+
+                    label.innerHTML = `<input type="checkbox" ${isChecked ? 'checked' : ''} data-cat="${cat}" data-subject="${subject}" value="${topic}"> ${topic}${qCountText}`;
+                    if(qCountText !== '') {
+                        label.style.display = 'flex';
+                        label.style.alignItems = 'center';
+                    }
                     
                     if(!forWizard) {
                         label.querySelector('input').addEventListener('change', (e) => {
@@ -423,6 +503,15 @@ document.addEventListener('DOMContentLoaded', () => {
             const unfinished = studentData.todayTasks.filter(t => !t.done);
             
             if (completed.length > 0) {
+                if(!studentData.questionCounts) studentData.questionCounts = {};
+                completed.forEach(t => {
+                    if (t.qCount > 0) {
+                        let baseName = t.text.replace(' (Soru Çözümü)', '').replace('Tekrar Testi: ', '');
+                        if(!studentData.questionCounts[baseName]) studentData.questionCounts[baseName] = 0;
+                        studentData.questionCounts[baseName] += parseInt(t.qCount);
+                    }
+                });
+
                 studentData.history.push({
                     date: studentData.lastLoginDate || new Date().toISOString().split('T')[0],
                     tasks: completed
@@ -533,6 +622,65 @@ document.addEventListener('DOMContentLoaded', () => {
         saveData();
     }
 
+    function getExamsForDate(date) {
+        let examsToReturn = [];
+        if (!studentData.settings || !studentData.settings.exams) return examsToReturn;
+        const examsObj = studentData.settings.exams;
+        const dayOfWeek = date.getDay();
+        const msPerDay = 1000*60*60*24;
+        
+        if (!studentData.startDate) studentData.startDate = Date.now();
+        
+        // Use timezone offset to ensure accurate day differences
+        const startDay = Math.floor((new Date(studentData.startDate).getTime() - new Date(studentData.startDate).getTimezoneOffset() * 60000) / msPerDay);
+        const currentDay = Math.floor((date.getTime() - date.getTimezoneOffset() * 60000) / msPerDay);
+        const daysElapsed = currentDay - startDay;
+        const weeksElapsed = Math.floor(daysElapsed / 7);
+        
+        const gen = examsObj.general;
+        if (gen) {
+            if (gen.tyt.freq === 'weekly' && gen.tyt.day === dayOfWeek) {
+                examsToReturn.push({ text: 'TYT Genel Denemesi', dur: 165, isGeneral: true, tag: 'deneme' });
+            } else if (gen.tyt.freq === 'biweekly' && gen.tyt.day === dayOfWeek && weeksElapsed % 2 === 0) {
+                examsToReturn.push({ text: 'TYT Genel Denemesi', dur: 165, isGeneral: true, tag: 'deneme' });
+            }
+            
+            if (gen.ayt.freq === 'weekly' && gen.ayt.day === dayOfWeek) {
+                examsToReturn.push({ text: 'AYT Genel Denemesi', dur: 180, isGeneral: true, tag: 'deneme' });
+            } else if (gen.ayt.freq === 'biweekly' && gen.ayt.day === dayOfWeek && weeksElapsed % 2 === 0) {
+                examsToReturn.push({ text: 'AYT Genel Denemesi', dur: 180, isGeneral: true, tag: 'deneme' });
+            }
+            
+            if (gen.ydt.freq === 'weekly' && gen.ydt.day === dayOfWeek) {
+                examsToReturn.push({ text: 'YDT Denemesi', dur: 120, isGeneral: true, tag: 'deneme' });
+            } else if (gen.ydt.freq === 'biweekly' && gen.ydt.day === dayOfWeek && weeksElapsed % 2 === 0) {
+                examsToReturn.push({ text: 'YDT Denemesi', dur: 120, isGeneral: true, tag: 'deneme' });
+            }
+        }
+
+        if (examsObj.branches) {
+            let branchOffset = 0;
+            examsObj.branches.forEach(b => {
+                const freq = b.freq;
+                if (freq === 1) { 
+                    examsToReturn.push({ text: `${b.name} Branş Denemesi`, dur: b.dur || studentData.settings.blockDur, isBranch: true, tag: 'deneme' });
+                } else if (freq === 7) { 
+                    if ((daysElapsed + branchOffset) % 7 === 0) {
+                        examsToReturn.push({ text: `${b.name} Branş Denemesi`, dur: b.dur || studentData.settings.blockDur, isBranch: true, tag: 'deneme' });
+                    }
+                    branchOffset++;
+                } else if (freq > 1) { 
+                    if ((daysElapsed + branchOffset) % freq === 0) {
+                        examsToReturn.push({ text: `${b.name} Branş Denemesi`, dur: b.dur || studentData.settings.blockDur, isBranch: true, tag: 'deneme' });
+                    }
+                    branchOffset++;
+                }
+            });
+        }
+        
+        return examsToReturn;
+    }
+
     function fillTodayTasks() {
         let tasks = studentData.todayTasks || [];
         let s = studentData.settings;
@@ -544,22 +692,49 @@ document.addEventListener('DOMContentLoaded', () => {
         const hasProb = tasks.some(t => t.tag === 'tyt' && t.text.includes('Problem'));
         
         let queue = [];
-        if (s.paraGoal > 0 && !hasPara) queue.push({ id: Date.now()+'p1', text: `${s.paraGoal} Paragraf Sorusu`, tag: 'tyt', done: false });
-        if (s.probGoal > 0 && !hasProb) queue.push({ id: Date.now()+'p2', text: `${s.probGoal} Problem Sorusu`, tag: 'tyt', done: false });
+
+        // Check for exams today
+        const todaysExams = getExamsForDate(new Date());
+        let hasGeneralExam = false;
+        todaysExams.forEach((exam, i) => {
+            const alreadyAdded = tasks.some(t => t.text === exam.text) || queue.some(q => q.text === exam.text);
+            if (!alreadyAdded) {
+                queue.push({ id: Date.now()+'ex'+i, text: exam.text, tag: exam.tag, done: false, dur: exam.dur });
+                if (exam.isGeneral) {
+                    hasGeneralExam = true;
+                    queue.push({ id: Date.now()+'exd'+i, text: 'Deneme Değerlendirmesi', tag: 'deneme', done: false, dur: 30 });
+                }
+            } else if (exam.isGeneral) {
+                hasGeneralExam = true;
+            }
+        });
+
+        // Add routines if no general exam (don't overburden on exam days)
+        if (!hasGeneralExam) {
+            if (s.paraGoal > 0 && !hasPara) queue.push({ id: Date.now()+'p1', text: `${s.paraGoal} Paragraf Sorusu`, tag: 'tyt', done: false });
+            if (s.probGoal > 0 && !hasProb) queue.push({ id: Date.now()+'p2', text: `${s.probGoal} Problem Sorusu`, tag: 'tyt', done: false });
+        }
 
         // Spaced Repetition Logic (+7 days)
         const now = Date.now();
         const sevenDays = 7 * 24 * 60 * 60 * 1000;
-        Object.keys(studentData.completedTopics || {}).forEach(topicName => {
-            let ts = studentData.completedTopics[topicName];
-            if (now - ts > sevenDays && !studentData.spacedRepetitionDone[topicName]) {
-                queue.push({ id: Date.now()+'sr'+Math.random(), text: `Tekrar Testi: ${topicName}`, tag: 'deneme', done: false });
-                studentData.spacedRepetitionDone[topicName] = true;
-            }
-        });
+        if (!hasGeneralExam) {
+            Object.keys(studentData.completedTopics || {}).forEach(topicName => {
+                let ts = studentData.completedTopics[topicName];
+                if (now - ts > sevenDays && !studentData.spacedRepetitionDone[topicName]) {
+                    queue.push({ id: Date.now()+'sr'+Math.random(), text: `Tekrar Testi: ${topicName}`, tag: 'deneme', done: false });
+                    studentData.spacedRepetitionDone[topicName] = true;
+                }
+            });
+        }
 
-        let mainSubjectsCount = tasks.filter(t => !t.text.includes('Paragraf') && !t.text.includes('Problem') && !t.text.includes('Tekrar')).length;
+        let mainSubjectsCount = tasks.filter(t => !t.text.includes('Paragraf') && !t.text.includes('Problem') && !t.text.includes('Tekrar') && !t.text.includes('Deneme')).length;
         
+        // If there's a general exam, block new topics
+        if (hasGeneralExam) {
+            mainSubjectsCount = capacity; 
+        }
+
         while(mainSubjectsCount < capacity) {
             if(studentData.taskQueue.length > 0) {
                 let nextTopic = studentData.taskQueue.shift();
@@ -604,7 +779,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if(i === splitIndex) {
                     currentTime = eveningTime; // Atla akşam vaktine
                 }
-                let duration = s.blockDur;
+                let duration = t.dur || s.blockDur;
                 if(t.text.includes('Paragraf')) duration = s.paraDur || 30;
                 else if(t.text.includes('Problem')) duration = s.probDur || 30;
                 let endTime = currentTime + duration;
@@ -613,7 +788,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         } else {
             tasks.forEach((t, i) => {
-                let duration = s.blockDur;
+                let duration = t.dur || s.blockDur;
                 if(t.text.includes('Paragraf')) duration = s.paraDur || 30;
                 else if(t.text.includes('Problem')) duration = s.probDur || 30;
                 let endTime = currentTime + duration;
@@ -658,6 +833,16 @@ document.addEventListener('DOMContentLoaded', () => {
             
             let timeBadgeHtml = task.timeStr ? `<div class="time-badge">${task.timeStr}</div>` : '';
             
+            let showQInput = task.text.includes('Soru Çözümü') || task.text.includes('Paragraf') || task.text.includes('Problem') || task.text.includes('Tekrar');
+            
+            let qInputHtml = '';
+            if (showQInput) {
+                qInputHtml = `
+                <div class="q-count-container" style="margin-left: 10px; flex-shrink: 0;">
+                    <input type="number" class="q-count-input" placeholder="Soru Adedi" value="${task.qCount || ''}" min="0" style="width: 75px; padding: 0.3rem; font-size: 0.8rem; border-radius: 6px; border: 1px solid #ccc; text-align: center;">
+                </div>`;
+            }
+
             li.innerHTML = `
                 <div class="drag-handle">☰</div>
                 <div class="task-checkbox"></div>
@@ -666,7 +851,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="task-text">${task.text}</div>
                     <span class="tag tag-${task.tag}">${task.tag.toUpperCase()}</span>
                 </div>
+                ${qInputHtml}
             `;
+
+            if (showQInput) {
+                const qInput = li.querySelector('.q-count-input');
+                qInput.addEventListener('change', (e) => {
+                    task.qCount = parseInt(e.target.value) || 0;
+                    saveData();
+                });
+            }
 
             li.querySelector('.task-checkbox').addEventListener('click', () => {
                 task.done = !task.done;
@@ -707,20 +901,55 @@ document.addEventListener('DOMContentLoaded', () => {
 
         let firstDateStr = null;
         let lastDateStr = null;
+        let queuedTopicsConsumed = 0;
 
         for(let dayOffset=1; dayOffset<=7; dayOffset++) {
+            const dayDate = new Date();
+            dayDate.setDate(dayDate.getDate() + dayOffset - 1); 
+            const dateStr = dayDate.toLocaleDateString('tr-TR', { weekday: 'short', day: 'numeric', month: 'short' });
+            const fullDateStr = dayDate.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            
+            if(dayOffset === 1) firstDateStr = fullDateStr;
+            if(dayOffset === 7) lastDateStr = fullDateStr;
+
             let dayTasks = [];
             
-            if(s.paraGoal > 0) dayTasks.push({ text: `${s.paraGoal} Paragraf Sorusu`, tag: 'tyt' });
-            if(s.probGoal > 0) dayTasks.push({ text: `${s.probGoal} Problem Sorusu`, tag: 'tyt' });
-
             if(dayOffset === 1) {
                 const todayMain = (studentData.todayTasks || []).filter(t => !t.text.includes('Paragraf') && !t.text.includes('Problem'));
-                todayMain.forEach(t => dayTasks.push({text: t.text, tag: t.tag}));
+                todayMain.forEach(t => dayTasks.push({text: t.text, tag: t.tag, dur: t.dur}));
+                
+                // Add routines if they were in todayTasks (might be blocked by general exam)
+                const hasPara = (studentData.todayTasks || []).some(t => t.text.includes('Paragraf'));
+                const hasProb = (studentData.todayTasks || []).some(t => t.text.includes('Problem'));
+                if (hasPara) dayTasks.push({ text: `${s.paraGoal} Paragraf Sorusu`, tag: 'tyt' });
+                if (hasProb) dayTasks.push({ text: `${s.probGoal} Problem Sorusu`, tag: 'tyt' });
             } else {
-                let startIndex = (dayOffset - 2) * capacity;
-                let chunk = studentData.taskQueue.slice(startIndex, startIndex + capacity);
-                chunk.forEach(t => dayTasks.push({text: t.text, tag: t.tag}));
+                let hasGeneralExam = false;
+                const futureExams = getExamsForDate(dayDate);
+                futureExams.forEach(exam => {
+                    dayTasks.push({ text: exam.text, tag: exam.tag, dur: exam.dur });
+                    if (exam.isGeneral) {
+                        hasGeneralExam = true;
+                        dayTasks.push({ text: 'Deneme Değerlendirmesi', tag: 'deneme', dur: 30 });
+                    }
+                });
+
+                if (!hasGeneralExam) {
+                    if(s.paraGoal > 0) dayTasks.push({ text: `${s.paraGoal} Paragraf Sorusu`, tag: 'tyt' });
+                    if(s.probGoal > 0) dayTasks.push({ text: `${s.probGoal} Problem Sorusu`, tag: 'tyt' });
+                    
+                    let topicsAdded = 0;
+                    while (topicsAdded < capacity) {
+                        if (studentData.taskQueue[queuedTopicsConsumed]) {
+                            let task = studentData.taskQueue[queuedTopicsConsumed];
+                            dayTasks.push({ text: task.text, tag: task.tag });
+                            queuedTopicsConsumed++;
+                            topicsAdded++;
+                        } else {
+                            break;
+                        }
+                    }
+                }
             }
 
             if(s.routineTime === 'evening') {
@@ -730,14 +959,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             assignTimes(dayTasks, s);
-
-            const dayDate = new Date();
-            dayDate.setDate(dayDate.getDate() + dayOffset - 1); 
-            const dateStr = dayDate.toLocaleDateString('tr-TR', { weekday: 'short', day: 'numeric', month: 'short' });
-            const fullDateStr = dayDate.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-            
-            if(dayOffset === 1) firstDateStr = fullDateStr;
-            if(dayOffset === 7) lastDateStr = fullDateStr;
 
             const dayCard = document.createElement('div');
             dayCard.className = 'day-card';
@@ -796,7 +1017,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     <h3>${dateStr}</h3><span class="tag tag-deneme">${record.tasks.length} Görev</span>
                 </div>
                 <ul style="list-style: none; padding-left: 0; font-size: 0.9rem; color: #475569;">
-                    ${record.tasks.map(t => `<li>✓ ${t.text}</li>`).join('')}
+                    ${record.tasks.map(t => {
+                        let qText = (t.qCount && parseInt(t.qCount) > 0) ? ` <b style="color:var(--primary-color);">(${t.qCount} Soru)</b>` : '';
+                        return `<li style="margin-bottom:0.25rem;">✓ ${t.text}${qText}</li>`;
+                    }).join('')}
                 </ul>
             `;
             container.appendChild(card);
@@ -816,4 +1040,136 @@ document.addEventListener('DOMContentLoaded', () => {
             window.print();
         });
     }
+    
+    // --- EXAM RESULTS (DENEME SONUÇLARI) ---
+    const EXAM_SUBJECTS = {
+        'TYT': ['Türkçe', 'Sosyal', 'Matematik', 'Fen'],
+        'AYT': ['Edebiyat', 'Tarih-1', 'Coğrafya-1', 'Tarih-2', 'Coğrafya-2', 'Felsefe', 'Din', 'Matematik', 'Fizik', 'Kimya', 'Biyoloji'],
+        'YDT': ['İngilizce']
+    };
+
+    function renderDynamicInputs() {
+        const type = document.getElementById('exam-result-type').value;
+        const container = document.getElementById('dynamic-net-inputs');
+        if(!container) return;
+        container.innerHTML = '';
+        document.getElementById('exam-result-score').value = '';
+
+        if(type === 'Branş') {
+            container.innerHTML = `
+                <div class="input-group" style="flex: 1; min-width: 100px;">
+                    <label>Net</label>
+                    <input type="number" class="sub-net-input" data-subject="Net" placeholder="0" step="0.25">
+                </div>
+            `;
+        } else {
+            let subjects = EXAM_SUBJECTS[type];
+            subjects.forEach(sub => {
+                container.innerHTML += `
+                    <div class="input-group" style="flex: 1; min-width: 80px;">
+                        <label>${sub}</label>
+                        <input type="number" class="sub-net-input" data-subject="${sub}" placeholder="0" step="0.25">
+                    </div>
+                `;
+            });
+        }
+
+        document.querySelectorAll('.sub-net-input').forEach(inp => {
+            inp.addEventListener('input', () => {
+                let total = 0;
+                document.querySelectorAll('.sub-net-input').forEach(i => {
+                    total += parseFloat(i.value) || 0;
+                });
+                document.getElementById('exam-result-score').value = total;
+            });
+        });
+    }
+
+    document.getElementById('exam-result-type').addEventListener('change', (e) => {
+        const type = e.target.value;
+        const branchGroup = document.getElementById('exam-result-branch-group');
+        if(type === 'Branş') {
+            branchGroup.classList.remove('hidden');
+        } else {
+            branchGroup.classList.add('hidden');
+        }
+        renderDynamicInputs();
+    });
+
+    document.getElementById('btn-save-exam-result').addEventListener('click', () => {
+        const type = document.getElementById('exam-result-type').value;
+        const branch = document.getElementById('exam-result-branch-name').value;
+        const score = document.getElementById('exam-result-score').value;
+
+        if(!score) return;
+        if(type === 'Branş' && !branch) return;
+
+        const subScores = {};
+        document.querySelectorAll('.sub-net-input').forEach(i => {
+            if(i.value) subScores[i.getAttribute('data-subject')] = parseFloat(i.value);
+        });
+
+        if(!studentData.examResults) studentData.examResults = [];
+        
+        studentData.examResults.push({
+            date: Date.now(),
+            type: type,
+            branch: type === 'Branş' ? branch : null,
+            score: parseFloat(score),
+            subScores: subScores
+        });
+        
+        saveData();
+        renderExamResults();
+        
+        document.getElementById('exam-result-score').value = '';
+        document.getElementById('exam-result-branch-name').value = '';
+        document.querySelectorAll('.sub-net-input').forEach(i => i.value = '');
+        alert('Deneme sonucun kaydedildi!');
+    });
+
+    function renderExamResults() {
+        const container = document.getElementById('exam-results-container');
+        if(!container) return;
+        container.innerHTML = '';
+        
+        if(!studentData.examResults || studentData.examResults.length === 0) {
+            container.innerHTML = '<p class="text-center text-secondary">Henüz bir deneme sonucu girmedin.</p>';
+            return;
+        }
+
+        [...studentData.examResults].reverse().forEach(record => {
+            const dateObj = new Date(record.date);
+            const dateStr = dateObj.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            
+            const title = record.type === 'Branş' ? `${record.branch} Denemesi` : `${record.type} Genel Denemesi`;
+            
+            let subScoreHtml = '';
+            if(record.subScores && Object.keys(record.subScores).length > 0 && record.type !== 'Branş') {
+                subScoreHtml = `<div style="font-size: 0.8rem; color: #64748b; margin-top: 5px;">
+                    ${Object.entries(record.subScores).map(([sub, val]) => `<span><b>${sub}:</b> ${val}</span>`).join(' | ')}
+                </div>`;
+            }
+
+            const div = document.createElement('div');
+            div.className = 'exam-result-item';
+            div.innerHTML = `
+                <div class="exam-result-info">
+                    <span class="exam-result-title">${title}</span>
+                    <span class="exam-result-date">${dateStr}</span>
+                    ${subScoreHtml}
+                </div>
+                <div class="exam-result-score">${record.score} Net</div>
+            `;
+            container.appendChild(div);
+        });
+    }
+
+    // Ekstra olarak renderExamResults() çağrısını init() veya showScreen içine de ekleyelim
+    // For now, we attach it to the button that opens the tab:
+    document.querySelector('[data-target="screen-exams"]').addEventListener('click', () => {
+        renderDynamicInputs();
+        renderExamResults();
+    });
+    
 });
