@@ -547,9 +547,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function endDayLogic(newDateStr) {
         if (studentData.todayTasks && studentData.todayTasks.length > 0) {
-            const completed = studentData.todayTasks.filter(t => t.done);
-            const unfinished = studentData.todayTasks.filter(t => !t.done);
+            const completed = studentData.todayTasks.filter(t => t.done && !t.skipped);
+            const partialTasks = studentData.todayTasks.filter(t => !t.done && !t.skipped && t.progress > 0 && t.progress < 100 && !t.text.includes('Paragraf') && !t.text.includes('Problem') && !t.text.includes('Tekrar Testi'));
+            const skipped = studentData.todayTasks.filter(t => t.skipped);
+            const unfinished = studentData.todayTasks.filter(t => !t.done && !t.skipped);
             
+            let historyTasks = [];
+
             if (completed.length > 0) {
                 if(!studentData.questionCounts) studentData.questionCounts = {};
                 completed.forEach(t => {
@@ -563,24 +567,24 @@ document.addEventListener('DOMContentLoaded', () => {
                         studentData.topicProgress[t.text] = 100;
                     }
                 });
-
-                studentData.history.push({
-                    date: studentData.lastLoginDate || new Date().toISOString().split('T')[0],
-                    tasks: completed
-                });
+                historyTasks = historyTasks.concat(completed);
             }
             
-            // Handle partial progress for unfinished tasks
-            const partialTasks = unfinished.filter(t => t.progress > 0 && t.progress < 100 && !t.text.includes('Paragraf') && !t.text.includes('Problem') && !t.text.includes('Tekrar Testi'));
             if (partialTasks.length > 0) {
-                // If there's partial progress, also log it in history
-                studentData.history.push({
-                    date: studentData.lastLoginDate || new Date().toISOString().split('T')[0],
-                    tasks: partialTasks.map(t => ({ ...t, isPartial: true }))
-                });
-                // Also save the progress state
                 partialTasks.forEach(t => {
                     studentData.topicProgress[t.text] = t.progress;
+                });
+                historyTasks = historyTasks.concat(partialTasks.map(t => ({ ...t, isPartial: true })));
+            }
+            
+            if (skipped.length > 0) {
+                historyTasks = historyTasks.concat(skipped.map(t => ({ ...t, isSkipped: true })));
+            }
+
+            if (historyTasks.length > 0) {
+                studentData.history.push({
+                    date: studentData.lastLoginDate || new Date().toISOString().split('T')[0],
+                    tasks: historyTasks
                 });
             }
             
@@ -601,9 +605,112 @@ document.addEventListener('DOMContentLoaded', () => {
             // Force a shift to history, and pull fresh tasks
             endDayLogic();
             renderToday();
-            alert('Gün başarıyla bitirildi! Harika bir iş çıkardın.');
+            updateOverallProgress();
+            alert('Gün başarıyla bitirildi. Yarının programı hazırlandı.');
         }
     });
+
+    const btnAddExtraQ = document.getElementById('btn-add-extra-q');
+    const modalExtraQ = document.getElementById('modal-extra-q');
+    const btnCloseExtraQ = document.getElementById('btn-close-extra-q');
+    const btnSaveExtraQ = document.getElementById('btn-save-extra-q');
+    const extraQSubjectSelect = document.getElementById('extra-q-subject-select');
+    const extraQTopicSelect = document.getElementById('extra-q-topic-select');
+    const extraQCount = document.getElementById('extra-q-count');
+
+    if (btnAddExtraQ) {
+        btnAddExtraQ.addEventListener('click', () => {
+            // Populate subjects
+            extraQSubjectSelect.innerHTML = '<option value="">-- Ders Seçiniz --</option>';
+            extraQTopicSelect.innerHTML = '<option value="">-- Önce Ders Seçiniz --</option>';
+            extraQTopicSelect.disabled = true;
+            
+            let subjects = new Set();
+            if (studentData.customPool) {
+                Object.keys(studentData.customPool).forEach(cat => {
+                    Object.keys(studentData.customPool[cat]).forEach(sub => {
+                        subjects.add(sub);
+                    });
+                });
+            }
+
+            Array.from(subjects).sort().forEach(sub => {
+                const opt = document.createElement('option');
+                opt.value = sub;
+                opt.textContent = sub;
+                extraQSubjectSelect.appendChild(opt);
+            });
+            
+            extraQCount.value = 10; // default
+            modalExtraQ.classList.remove('hidden');
+        });
+    }
+
+    if (extraQSubjectSelect) {
+        extraQSubjectSelect.addEventListener('change', (e) => {
+            const subject = e.target.value;
+            extraQTopicSelect.innerHTML = '<option value="">-- Konu Seçiniz --</option>';
+            
+            if (!subject) {
+                extraQTopicSelect.disabled = true;
+                return;
+            }
+            
+            extraQTopicSelect.disabled = false;
+            
+            let topics = new Set();
+            if (studentData.customPool) {
+                Object.keys(studentData.customPool).forEach(cat => {
+                    if (studentData.customPool[cat][subject]) {
+                        studentData.customPool[cat][subject].forEach(topic => {
+                            topics.add(topic);
+                        });
+                    }
+                });
+            }
+            
+            Array.from(topics).forEach(topic => {
+                const opt = document.createElement('option');
+                opt.value = topic;
+                opt.textContent = topic;
+                extraQTopicSelect.appendChild(opt);
+            });
+        });
+    }
+
+    if (btnCloseExtraQ) {
+        btnCloseExtraQ.addEventListener('click', () => {
+            modalExtraQ.classList.add('hidden');
+        });
+    }
+
+    if (btnSaveExtraQ) {
+        btnSaveExtraQ.addEventListener('click', () => {
+            const subject = extraQSubjectSelect.value;
+            const topicBase = extraQTopicSelect.value;
+            const count = parseInt(extraQCount.value);
+            
+            if (subject && topicBase && count > 0) {
+                const fullTopicName = `${subject}: ${topicBase}`;
+                if (!studentData.questionCounts) studentData.questionCounts = {};
+                if (!studentData.questionCounts[fullTopicName]) studentData.questionCounts[fullTopicName] = 0;
+                
+                studentData.questionCounts[fullTopicName] += count;
+                saveData();
+                updateOverallProgress();
+                
+                // Re-render the Progress Tab if active
+                if (document.getElementById('screen-progress') && !document.getElementById('screen-progress').classList.contains('hidden')) {
+                    document.getElementById('btn-progress').click(); 
+                }
+                
+                alert(`Tebrikler! ${fullTopicName} konusundan ${count} soru başarıyla eklendi.`);
+                modalExtraQ.classList.add('hidden');
+            } else {
+                alert('Lütfen ders, konu ve geçerli bir soru adedi seçtiğinizden emin olun.');
+            }
+        });
+    }
 
     btnAdvance.addEventListener('click', () => {
         ensureTaskQueue();
@@ -895,7 +1002,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         studentData.todayTasks.forEach((task) => {
             const li = document.createElement('li');
-            li.className = `task-item ${task.done ? 'completed' : ''}`;
+            li.className = `task-item ${task.done ? 'completed' : ''} ${task.skipped ? 'skipped' : ''}`;
             
             let timeBadgeHtml = task.timeStr ? `<div class="time-badge">${task.timeStr}</div>` : '';
             
@@ -923,18 +1030,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>`;
             }
 
+            let textStyle = task.skipped ? 'text-decoration: line-through; color: #ef4444;' : '';
             li.innerHTML = `
                 <div class="drag-handle">☰</div>
                 <div class="task-checkbox"></div>
                 <div style="flex-grow: 1; display: flex; flex-direction: column;">
                     <div style="display: flex; align-items: center;">
                         ${timeBadgeHtml}
-                        <div class="task-text">${task.text}</div>
+                        <div class="task-text" style="${textStyle}">${task.text}</div>
                         <span class="tag tag-${task.tag}">${task.tag.toUpperCase()}</span>
                     </div>
                     ${sliderHtml}
                 </div>
                 ${qInputHtml}
+                ${!showSlider ? `<div class="task-skip-btn" style="cursor: pointer; color: #ef4444; margin-left: 10px; font-size: 1.2rem;" title="Yapılamadı / Atla">✖</div>` : ''}
             `;
 
             if (showQInput) {
@@ -965,6 +1074,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             li.querySelector('.task-checkbox').addEventListener('click', () => {
+                if (task.skipped) return; // Prevent checking if skipped
                 task.done = !task.done;
                 li.classList.toggle('completed');
                 
@@ -992,6 +1102,40 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 saveData();
             });
+            
+            const skipBtn = li.querySelector('.task-skip-btn');
+            if (skipBtn) {
+                skipBtn.addEventListener('click', () => {
+                    task.skipped = !task.skipped;
+                    li.classList.toggle('skipped');
+                    
+                    const taskTextEl = li.querySelector('.task-text');
+                    if (task.skipped) {
+                        task.done = false;
+                        li.classList.remove('completed');
+                        taskTextEl.style.textDecoration = 'line-through';
+                        taskTextEl.style.color = '#ef4444';
+                        
+                        if (task.text.includes(': ') && !task.text.includes('Tekrar')) {
+                            delete studentData.completedTopics[task.text];
+                        }
+                        
+                        // clear progress
+                        if (task.progress) {
+                            task.progress = 0;
+                            studentData.topicProgress[task.text] = 0;
+                        }
+                        if (showSlider) {
+                            li.querySelector('.task-progress-slider').value = 0;
+                            li.querySelector('.task-progress-label').textContent = '%0';
+                        }
+                    } else {
+                        taskTextEl.style.textDecoration = 'none';
+                        taskTextEl.style.color = 'inherit';
+                    }
+                    saveData();
+                });
+            }
 
             ul.appendChild(li);
         });
@@ -1139,13 +1283,19 @@ document.addEventListener('DOMContentLoaded', () => {
                         let qText = (t.qCount && parseInt(t.qCount) > 0) ? ` <b style="color:var(--primary-color);">(${t.qCount} Soru)</b>` : '';
                         let icon = '✓';
                         let progText = '';
-                        if (t.isPartial) {
+                        let textStyle = '';
+                        if (t.isSkipped) {
+                            icon = '✖';
+                            progText = ` <span style="font-size: 0.8rem; color: #ef4444; font-weight: bold;">(Yapılamadı)</span>`;
+                            qText = '';
+                            textStyle = 'text-decoration: line-through; color: #ef4444;';
+                        } else if (t.isPartial) {
                             icon = '⏳';
                             progText = ` <span style="font-size: 0.8rem; color: #f59e0b; font-weight: bold;">(%${t.progress} çalışıldı)</span>`;
                         } else if (t.progress === 100) {
                             progText = ` <span style="font-size: 0.8rem; color: #22c55e; font-weight: bold;">(Tamamlandı)</span>`;
                         }
-                        return `<li style="margin-bottom:0.25rem;">${icon} ${t.text}${progText}${qText}</li>`;
+                        return `<li style="margin-bottom:0.25rem;"><span style="${textStyle}">${icon} ${t.text}</span>${progText}${qText}</li>`;
                     }).join('')}
                 </ul>
             `;

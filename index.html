@@ -286,9 +286,10 @@
 
         <!-- SCREEN 3: PROGRAM VIEW (TODAY) -->
         <section id="screen-program" class="screen hidden tab-content">
-            <div class="action-bar">
-                <button id="btn-advance-task" class="btn-outline">⚡ Daha Fazla Görev Çek</button>
-                <button id="btn-end-day" class="btn-primary">✅ Günü Bitir</button>
+            <div class="action-bar" style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <button id="btn-advance-task" class="btn-outline" style="flex: 1; min-width: 120px;">🔄 Fazla Görev</button>
+                <button id="btn-add-extra-q" class="btn-outline" style="flex: 1; min-width: 120px; color: #3b82f6; border-color: #3b82f6; font-weight: bold;">📝 Ek Soru Gir</button>
+                <button id="btn-end-day" class="btn-primary" style="flex: 1; min-width: 120px;">🌙 Günü Bitir</button>
             </div>
 
             <div class="glass-card">
@@ -453,6 +454,35 @@
         </nav>
 
     </main>
+
+    <!-- Extra Questions Modal -->
+    <div id="modal-extra-q" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">Ekstra Soru Çözümü Ekle</div>
+            <div class="modal-body">
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label style="display:block; margin-bottom: 5px; font-weight: bold; color: #475569;">Ders Seçimi</label>
+                    <select id="extra-q-subject-select" style="width: 100%; padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 6px; outline: none;">
+                        <option value="">-- Ders Seçiniz --</option>
+                    </select>
+                </div>
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label style="display:block; margin-bottom: 5px; font-weight: bold; color: #475569;">Hangi konudan soru çözdün?</label>
+                    <select id="extra-q-topic-select" style="width: 100%; padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 6px; outline: none;" disabled>
+                        <option value="">-- Önce Ders Seçiniz --</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label style="display:block; margin-bottom: 5px; font-weight: bold; color: #475569;">Çözülen Soru Adedi</label>
+                    <input type="number" id="extra-q-count" min="1" value="10" style="width: 100%; padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 6px; outline: none;">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="btn-close-extra-q" class="btn-outline">İptal</button>
+                <button id="btn-save-extra-q" class="btn-primary">Kaydet</button>
+            </div>
+        </div>
+    </div>
 
     <script src="topics.js"></script>
     <script src="app.js"></script>
