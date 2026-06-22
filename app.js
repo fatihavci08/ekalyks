@@ -547,50 +547,59 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function endDayLogic(newDateStr) {
         if (studentData.todayTasks && studentData.todayTasks.length > 0) {
-            const completed = studentData.todayTasks.filter(t => t.done && !t.skipped);
-            const partialTasks = studentData.todayTasks.filter(t => !t.done && !t.skipped && t.progress > 0 && t.progress < 100 && !t.text.includes('Paragraf') && !t.text.includes('Problem') && !t.text.includes('Tekrar Testi'));
-            const skipped = studentData.todayTasks.filter(t => t.skipped);
-            const unfinished = studentData.todayTasks.filter(t => !t.done && !t.skipped);
-            
             let historyTasks = [];
-
-            if (completed.length > 0) {
-                if(!studentData.questionCounts) studentData.questionCounts = {};
-                completed.forEach(t => {
+            
+            studentData.todayTasks.forEach(t => {
+                const isRoutine = t.text.includes('Paragraf') || t.text.includes('Problem') || t.text.includes('Tekrar Testi') || t.tag === 'deneme';
+                const oldProgress = t.startProgress !== undefined ? t.startProgress : (studentData.topicProgress[t.text] || 0);
+                const newProgress = t.progress !== undefined ? t.progress : oldProgress;
+                
+                if (t.done || t.progress === 100) {
+                    // Task fully completed today
                     if (t.qCount > 0) {
                         let baseName = t.text.replace(' (Soru Çözümü)', '').replace('Tekrar Testi: ', '');
+                        if(!studentData.questionCounts) studentData.questionCounts = {};
                         if(!studentData.questionCounts[baseName]) studentData.questionCounts[baseName] = 0;
                         studentData.questionCounts[baseName] += parseInt(t.qCount);
                     }
-                    if (t.progress !== undefined) {
-                        t.progress = 100;
+                    if (t.progress !== undefined && !isRoutine) {
                         studentData.topicProgress[t.text] = 100;
                     }
-                });
-                historyTasks = historyTasks.concat(completed);
-            }
-            
-            if (partialTasks.length > 0) {
-                partialTasks.forEach(t => {
-                    studentData.topicProgress[t.text] = t.progress;
-                });
-                historyTasks = historyTasks.concat(partialTasks.map(t => ({ ...t, isPartial: true })));
-            }
-            
-            if (skipped.length > 0) {
-                historyTasks = historyTasks.concat(skipped.map(t => ({ ...t, isSkipped: true })));
-            }
+                    historyTasks.push({ ...t, progress: 100 });
+                } else if (t.skipped) {
+                    // Explicitly marked as skipped
+                    historyTasks.push({ ...t, isSkipped: true });
+                } else if (isRoutine) {
+                    // Untouched/Unfinished Routine -> Mark as skipped, do not carry over
+                    historyTasks.push({ ...t, isSkipped: true });
+                } else {
+                    // It's a Topic task. Check if progress was made *today*
+                    if (newProgress > oldProgress) {
+                        // Progress was made today
+                        studentData.topicProgress[t.text] = newProgress;
+                        historyTasks.push({ ...t, isPartial: true, progress: newProgress });
+                    } else {
+                        // No progress made today -> Log as skipped for today
+                        historyTasks.push({ ...t, isSkipped: true });
+                    }
+                }
+            });
 
             if (historyTasks.length > 0) {
+                if(!studentData.history) studentData.history = [];
                 studentData.history.push({
                     date: studentData.lastLoginDate || new Date().toISOString().split('T')[0],
                     tasks: historyTasks
                 });
             }
             
-            // Put unfinished tasks back to the VERY FRONT of the queue so they aren't lost
-            // BUT discard uncompleted routines (Paragraf/Problem/Tekrar) so they don't pile up.
-            const unfinishedCore = unfinished.filter(t => !t.text.includes('Paragraf') && !t.text.includes('Problem') && !t.text.includes('Tekrar Testi'));
+            // Put unfinished TOPIC tasks back to the VERY FRONT of the queue so they aren't lost
+            const unfinishedCore = studentData.todayTasks.filter(t => {
+                const isRoutine = t.text.includes('Paragraf') || t.text.includes('Problem') || t.text.includes('Tekrar Testi') || t.tag === 'deneme';
+                const isDone = t.done || t.progress === 100 || t.skipped;
+                return !isDone && !isRoutine;
+            });
+            
             studentData.taskQueue = [...unfinishedCore, ...studentData.taskQueue];
             studentData.todayTasks = [];
         }
@@ -831,7 +840,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        if (examsObj.branches) {
+        const hasGeneralExam = examsToReturn.some(e => e.isGeneral);
+
+        if (examsObj.branches && !hasGeneralExam) {
             let branchOffset = 0;
             examsObj.branches.forEach(b => {
                 const freq = b.freq;
@@ -1009,9 +1020,14 @@ document.addEventListener('DOMContentLoaded', () => {
             let showQInput = task.text.includes('Soru Çözümü') || task.text.includes('Paragraf') || task.text.includes('Problem') || task.text.includes('Tekrar');
             
             let showSlider = !showQInput && task.text.includes(': ') && !task.text.includes('Denemesi') && !task.text.includes('Tekrar');
-            let progressVal = task.progress !== undefined ? task.progress : (studentData.topicProgress[task.text] || 0);
+            let isRoutineTask = task.text.includes('Paragraf') || task.text.includes('Problem') || task.text.includes('Tekrar Testi') || task.tag === 'deneme';
+            let progressVal = task.progress !== undefined ? task.progress : (!isRoutineTask && studentData.topicProgress[task.text] ? studentData.topicProgress[task.text] : 0);
             if (task.done) progressVal = 100;
             task.progress = progressVal;
+            
+            if (task.startProgress === undefined) {
+                task.startProgress = studentData.topicProgress[task.text] || 0;
+            }
 
             let qInputHtml = '';
             if (showQInput) {
@@ -1050,7 +1066,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 const qInput = li.querySelector('.q-count-input');
                 qInput.addEventListener('change', (e) => {
                     task.qCount = parseInt(e.target.value) || 0;
-                    saveData();
+                    if (task.qCount > 0 && !task.done) {
+                        li.querySelector('.task-checkbox').click(); // Auto-check
+                    } else if (task.qCount === 0 && task.done) {
+                        li.querySelector('.task-checkbox').click(); // Auto-uncheck
+                    } else {
+                        saveData();
+                    }
                 });
             }
 
@@ -1061,7 +1083,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     const val = parseInt(e.target.value);
                     label.textContent = '%' + val;
                     task.progress = val;
-                    studentData.topicProgress[task.text] = val;
                     
                     if (val === 100 && !task.done) {
                         li.querySelector('.task-checkbox').click(); // Auto-check if 100%
@@ -1091,6 +1112,18 @@ document.addEventListener('DOMContentLoaded', () => {
                         slider.value = 99;
                         label.textContent = '%99';
                         studentData.topicProgress[task.text] = 99;
+                    }
+                }
+
+                if (task.done && showQInput) {
+                    const qInput = li.querySelector('.q-count-input');
+                    if (!qInput.value || parseInt(qInput.value) === 0) {
+                        // Extract number from task text if it exists (e.g. "20 Paragraf Sorusu" -> 20)
+                        let match = task.text.match(/^(\d+)/);
+                        if (match) {
+                            qInput.value = match[1];
+                            task.qCount = parseInt(match[1]);
+                        }
                     }
                 }
                 
@@ -1157,97 +1190,121 @@ document.addEventListener('DOMContentLoaded', () => {
         const container = document.getElementById('weekly-container');
         container.innerHTML = '';
         let s = studentData.settings;
-        let capacity = s.capacity || 2;
-
+        
         ensureTaskQueue(); 
-
-        let firstDateStr = null;
-        let lastDateStr = null;
-        let queuedTopicsConsumed = 0;
-
-        for(let dayOffset=1; dayOffset<=7; dayOffset++) {
-            const dayDate = new Date();
-            dayDate.setDate(dayDate.getDate() + dayOffset - 1); 
-            const dateStr = dayDate.toLocaleDateString('tr-TR', { weekday: 'short', day: 'numeric', month: 'short' });
-            const fullDateStr = dayDate.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-            
-            if(dayOffset === 1) firstDateStr = fullDateStr;
-            if(dayOffset === 7) lastDateStr = fullDateStr;
-
-            let dayTasks = [];
-            
-            if(dayOffset === 1) {
-                const todayMain = (studentData.todayTasks || []).filter(t => !t.text.includes('Paragraf') && !t.text.includes('Problem'));
-                todayMain.forEach(t => dayTasks.push({text: t.text, tag: t.tag, dur: t.dur}));
-                
-                // Add routines if they were in todayTasks (might be blocked by general exam)
-                const hasPara = (studentData.todayTasks || []).some(t => t.text.includes('Paragraf'));
-                const hasProb = (studentData.todayTasks || []).some(t => t.text.includes('Problem'));
-                if (hasPara) dayTasks.push({ text: `${s.paraGoal} Paragraf Sorusu`, tag: 'tyt' });
-                if (hasProb) dayTasks.push({ text: `${s.probGoal} Problem Sorusu`, tag: 'tyt' });
-            } else {
-                let hasGeneralExam = false;
-                const futureExams = getExamsForDate(dayDate);
-                futureExams.forEach(exam => {
-                    dayTasks.push({ text: exam.text, tag: exam.tag, dur: exam.dur });
-                    if (exam.isGeneral) {
-                        hasGeneralExam = true;
-                        dayTasks.push({ text: 'Deneme Değerlendirmesi', tag: 'deneme', dur: 30 });
-                    }
-                });
-
-                if (!hasGeneralExam) {
-                    if(s.paraGoal > 0) dayTasks.push({ text: `${s.paraGoal} Paragraf Sorusu`, tag: 'tyt' });
-                    if(s.probGoal > 0) dayTasks.push({ text: `${s.probGoal} Problem Sorusu`, tag: 'tyt' });
-                    
-                    let topicsAdded = 0;
-                    while (topicsAdded < capacity) {
-                        if (studentData.taskQueue[queuedTopicsConsumed]) {
-                            let task = studentData.taskQueue[queuedTopicsConsumed];
-                            dayTasks.push({ text: task.text, tag: task.tag });
-                            queuedTopicsConsumed++;
-                            topicsAdded++;
-                        } else {
-                            break;
-                        }
-                    }
-                }
-            }
-
-            if(s.routineTime === 'evening') {
-                const routines = dayTasks.filter(t => t.text.includes('Paragraf') || t.text.includes('Problem'));
-                const others = dayTasks.filter(t => !t.text.includes('Paragraf') && !t.text.includes('Problem'));
-                dayTasks = others.concat(routines);
-            }
-
-            assignTimes(dayTasks, s);
-
-            const dayCard = document.createElement('div');
-            dayCard.className = 'day-card';
-            dayCard.innerHTML = `<div class="day-header"><h3>${dateStr}</h3></div>`;
-            
-            const ul = document.createElement('ul');
-            ul.className = 'task-list';
-            dayTasks.forEach(task => {
+        
+        // --- 1. BUGÜNÜN HEDEFLERİ (Aktif Görevler) ---
+        const todayCard = document.createElement('div');
+        todayCard.className = 'day-card';
+        todayCard.innerHTML = `<div class="day-header" style="background-color: var(--primary-color);"><h3 style="color: white;">Bugünün Hedefleri (Aktif)</h3></div>`;
+        const todayUl = document.createElement('ul');
+        todayUl.className = 'task-list';
+        
+        if (studentData.todayTasks && studentData.todayTasks.length > 0) {
+            studentData.todayTasks.forEach(task => {
                 const li = document.createElement('li');
                 li.className = 'task-item';
+                
+                let progressVal = task.progress !== undefined ? task.progress : (studentData.topicProgress[task.text] || 0);
+                if (task.done) progressVal = 100;
+                
                 let timeBadgeHtml = task.timeStr ? `<div class="time-badge">${task.timeStr}</div>` : '';
+                let progressBadgeHtml = task.text.includes(': ') && !task.text.includes('Tekrar') && !task.text.includes('Denemesi') 
+                    ? `<span style="font-size: 0.8rem; font-weight: bold; color: #3b82f6; margin-left: 5px;">(%${progressVal})</span>`
+                    : '';
+                    
                 li.innerHTML = `
                     <div style="flex-grow: 1;">
                         ${timeBadgeHtml}
-                        <div class="task-text">${task.text}</div>
+                        <div class="task-text">${task.text} ${progressBadgeHtml}</div>
                         <span class="tag tag-${task.tag}">${task.tag.toUpperCase()}</span>
                     </div>
                 `;
-                ul.appendChild(li);
+                todayUl.appendChild(li);
             });
-            dayCard.appendChild(ul);
-            container.appendChild(dayCard);
+        } else {
+            todayUl.innerHTML = '<li style="color: #64748b; font-size: 0.9rem; text-align: center; border:none; padding:1rem;">Bugün için planlanmış aktif görev yok.</li>';
         }
+        todayCard.appendChild(todayUl);
+        container.appendChild(todayCard);
+
+        // --- 2. SIRADAKİ KONULAR (Hedef Kuyruğu) ---
+        const queueCard = document.createElement('div');
+        queueCard.className = 'day-card';
+        queueCard.innerHTML = `<div class="day-header" style="background-color: #f59e0b;"><h3 style="color: white;">Sıradaki Konular (Kuyruk)</h3></div>`;
+        const queueUl = document.createElement('ul');
+        queueUl.className = 'task-list';
+        
+        // Filter out generic routines from the queue to just show upcoming topics
+        const upcomingTopics = studentData.taskQueue.filter(t => !t.text.includes('Paragraf') && !t.text.includes('Problem') && !t.text.includes('Soru Çözümü'));
+        
+        if (upcomingTopics.length > 0) {
+            upcomingTopics.slice(0, 10).forEach((task, index) => {
+                const li = document.createElement('li');
+                li.className = 'task-item';
+                li.innerHTML = `
+                    <div style="flex-grow: 1; display: flex; align-items: center;">
+                        <span style="font-weight: bold; color: #f59e0b; margin-right: 10px;">${index + 1}.</span>
+                        <div class="task-text">${task.text}</div>
+                        <span class="tag tag-${task.tag}" style="margin-left: auto;">${task.tag.toUpperCase()}</span>
+                    </div>
+                `;
+                queueUl.appendChild(li);
+            });
+            if (upcomingTopics.length > 10) {
+                const li = document.createElement('li');
+                li.innerHTML = `<div style="text-align: center; width: 100%; color: #64748b; font-size: 0.85rem;">+ ${upcomingTopics.length - 10} konu daha var...</div>`;
+                queueUl.appendChild(li);
+            }
+        } else {
+            queueUl.innerHTML = '<li style="color: #64748b; font-size: 0.9rem; text-align: center; border:none; padding:1rem;">Kuyrukta konu kalmadı.</li>';
+        }
+        queueCard.appendChild(queueUl);
+        container.appendChild(queueCard);
+
+        // --- 3. HAFTALIK SABİTLER (Denemeler ve Rutinler) ---
+        const routineCard = document.createElement('div');
+        routineCard.className = 'day-card';
+        routineCard.innerHTML = `<div class="day-header" style="background-color: #10b981;"><h3 style="color: white;">Haftalık Sabitler</h3></div>`;
+        const routineUl = document.createElement('ul');
+        routineUl.className = 'task-list';
+        
+        let routineHtml = '';
+        if (s.paraGoal > 0) routineHtml += `<li class="task-item"><div class="task-text">Her Gün: ${s.paraGoal} Paragraf</div><span class="tag tag-tyt">TYT</span></li>`;
+        if (s.probGoal > 0) routineHtml += `<li class="task-item"><div class="task-text">Her Gün: ${s.probGoal} Problem</div><span class="tag tag-tyt">TYT</span></li>`;
+        
+        // Get exams for the next 7 days
+        let examsFound = false;
+        for(let dayOffset=0; dayOffset<7; dayOffset++) {
+            const dayDate = new Date();
+            dayDate.setDate(dayDate.getDate() + dayOffset); 
+            const dateStr = dayDate.toLocaleDateString('tr-TR', { weekday: 'long' });
+            
+            const futureExams = getExamsForDate(dayDate);
+            futureExams.forEach(exam => {
+                examsFound = true;
+                routineHtml += `<li class="task-item">
+                    <div style="flex-grow: 1;">
+                        <span style="font-weight: bold; color: #10b981;">${dateStr}:</span> 
+                        <span class="task-text">${exam.text}</span>
+                    </div>
+                    <span class="tag tag-${exam.tag}">${exam.tag.toUpperCase()}</span>
+                </li>`;
+            });
+        }
+        
+        if (!examsFound && routineHtml === '') {
+            routineHtml = '<li style="color: #64748b; font-size: 0.9rem; text-align: center; border:none; padding:1rem;">Haftalık sabit bir görev bulunmuyor.</li>';
+        }
+        
+        routineUl.innerHTML = routineHtml;
+        routineCard.appendChild(routineUl);
+        container.appendChild(routineCard);
 
         const dateRangeEl = document.getElementById('pdf-date-range');
         if(dateRangeEl) {
-            dateRangeEl.textContent = `${firstDateStr} -- ${lastDateStr}`;
+            const todayStr = new Date().toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            dateRangeEl.textContent = `Güncelleme: ${todayStr}`;
         }
     }
 
