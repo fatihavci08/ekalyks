@@ -843,23 +843,92 @@ document.addEventListener('DOMContentLoaded', () => {
         const hasGeneralExam = examsToReturn.some(e => e.isGeneral);
 
         if (examsObj.branches && !hasGeneralExam) {
-            let branchOffset = 0;
-            examsObj.branches.forEach(b => {
-                const freq = b.freq;
-                if (freq === 1) { 
-                    examsToReturn.push({ text: `${b.name} Branş Denemesi`, dur: b.dur || studentData.settings.blockDur, isBranch: true, tag: 'deneme' });
-                } else if (freq === 7) { 
-                    if ((daysElapsed + branchOffset) % 7 === 0) {
-                        examsToReturn.push({ text: `${b.name} Branş Denemesi`, dur: b.dur || studentData.settings.blockDur, isBranch: true, tag: 'deneme' });
-                    }
-                    branchOffset++;
-                } else if (freq > 1) { 
-                    if ((daysElapsed + branchOffset) % freq === 0) {
-                        examsToReturn.push({ text: `${b.name} Branş Denemesi`, dur: b.dur || studentData.settings.blockDur, isBranch: true, tag: 'deneme' });
-                    }
-                    branchOffset++;
-                }
+            const sozelDersler = ['türkçe', 'sosyal', 'tarih', 'coğrafya', 'felsefe', 'din', 'edebiyat'];
+            const sayisalDersler = ['matematik', 'geometri', 'fizik', 'kimya', 'biyoloji', 'fen'];
+
+            let sIdx=0, syIdx=0, dIdx=0;
+            let branchDefs = examsObj.branches.map(b => {
+                const lowerName = b.name.toLowerCase();
+                let category = 'diger';
+                let offset = 0;
+                if (sozelDersler.some(d => lowerName.includes(d))) { category = 'sozel'; offset = sIdx++; }
+                else if (sayisalDersler.some(d => lowerName.includes(d))) { category = 'sayisal'; offset = syIdx++; }
+                else { category = 'diger'; offset = dIdx++; }
+                
+                return { name: b.name, freq: b.freq, dur: b.dur || studentData.settings.blockDur, category: category, offset: offset };
             });
+
+            // If we are looking at a date before the start date, don't schedule branch exams
+            if (daysElapsed >= 0) {
+                let pendingExams = [];
+                let pickedForTarget = [];
+
+                // Simulate schedule up to target day
+                for (let d = 0; d <= daysElapsed; d++) {
+                    // 1. Add exams naturally due on day d
+                    branchDefs.forEach(b => {
+                        let isDue = false;
+                        if (b.freq === 1) isDue = true;
+                        else if (b.freq === 7 && (d + b.offset) % 7 === 0) isDue = true;
+                        else if (b.freq > 1 && (d + b.offset) % b.freq === 0) isDue = true;
+                        
+                        if (isDue) pendingExams.push({ exam: b, waitDays: 0 });
+                    });
+
+                    // 2. Increment wait times
+                    pendingExams.forEach(p => p.waitDays++);
+
+                    // 3. Sort by priority (waitDays DESC)
+                    pendingExams.sort((a, b) => b.waitDays - a.waitDays);
+
+                    let dayPicks = [];
+                    let nextPending = [];
+
+                    function canAddExam(exam) {
+                        const text = exam.name.toLowerCase();
+                        const hasTurkce = dayPicks.some(p => p.name.toLowerCase().includes('türkçe'));
+                        const hasMat = dayPicks.some(p => p.name.toLowerCase().includes('matematik'));
+                        if (text.includes('türkçe') && hasMat) return false;
+                        if (text.includes('matematik') && hasTurkce) return false;
+                        return true;
+                    }
+
+                    // 4. Pick up to 2 exams without heavy overlap
+                    for (let i = 0; i < pendingExams.length; i++) {
+                        let candidate = pendingExams[i].exam;
+                        if (dayPicks.length < 2 && canAddExam(candidate)) {
+                            // To perfectly balance Sozel/Sayisal:
+                            // If we already picked a Sozel, and candidate is another Sozel, 
+                            // check if there's a Sayisal with EXACTLY the SAME waitDays that we can pick instead.
+                            const hasSameCategory = dayPicks.some(p => p.category === candidate.category);
+                            const existsBetterAlternative = pendingExams.slice(i+1).some(other => 
+                                other.waitDays === pendingExams[i].waitDays && 
+                                other.exam.category !== candidate.category && 
+                                !dayPicks.some(p => p.category === other.exam.category) &&
+                                canAddExam(other.exam)
+                            );
+
+                            if (hasSameCategory && existsBetterAlternative) {
+                                nextPending.push(pendingExams[i]); // skip for now
+                            } else {
+                                dayPicks.push(candidate);
+                            }
+                        } else {
+                            nextPending.push(pendingExams[i]);
+                        }
+                    }
+
+                    pendingExams = nextPending;
+                    
+                    if (d === daysElapsed) {
+                        pickedForTarget = dayPicks;
+                    }
+                }
+
+                pickedForTarget.forEach(b => {
+                    examsToReturn.push({ text: `${b.name} Branş Denemesi`, dur: b.dur, isBranch: true, tag: 'deneme' });
+                });
+            }
         }
         
         return examsToReturn;
@@ -880,7 +949,10 @@ document.addEventListener('DOMContentLoaded', () => {
         // Check for exams today
         const todaysExams = getExamsForDate(new Date());
         let hasGeneralExam = false;
+        let hasTurkceDeneme = false;
         todaysExams.forEach((exam, i) => {
+            if (exam.text.toLowerCase().includes('türkçe') && exam.isBranch) hasTurkceDeneme = true;
+            
             const alreadyAdded = tasks.some(t => t.text === exam.text) || queue.some(q => q.text === exam.text);
             if (!alreadyAdded) {
                 queue.push({ id: Date.now()+'ex'+i, text: exam.text, tag: exam.tag, done: false, dur: exam.dur });
@@ -893,9 +965,16 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
+        // If today is a general exam day, push any non-exam tasks back to the queue
+        if (hasGeneralExam) {
+            const nonExams = tasks.filter(t => !t.text.includes('Deneme') && !t.isGeneral);
+            studentData.taskQueue = [...nonExams, ...studentData.taskQueue];
+            tasks = tasks.filter(t => t.text.includes('Deneme') || t.isGeneral);
+        }
+
         // Add routines if no general exam (don't overburden on exam days)
         if (!hasGeneralExam) {
-            if (s.paraGoal > 0 && !hasPara) queue.push({ id: Date.now()+'p1', text: `${s.paraGoal} Paragraf Sorusu`, tag: 'tyt', done: false });
+            if (s.paraGoal > 0 && !hasPara && !hasTurkceDeneme) queue.push({ id: Date.now()+'p1', text: `${s.paraGoal} Paragraf Sorusu`, tag: 'tyt', done: false });
             if (s.probGoal > 0 && !hasProb) queue.push({ id: Date.now()+'p2', text: `${s.probGoal} Problem Sorusu`, tag: 'tyt', done: false });
         }
 
@@ -1189,19 +1268,37 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderWeeklyTab() {
         const container = document.getElementById('weekly-container');
         container.innerHTML = '';
-        let s = studentData.settings;
+        let s = studentData.settings || {};
         
         ensureTaskQueue(); 
+        
+        const printHeaderHtml = `
+            <div class="print-page-header hidden-in-web">
+                <h2>ERTUĞRUL KURDOĞLU ANADOLU LİSESİ</h2>
+                <h3>YKS Çalışma Programı - ${s.name || 'Öğrenci'}</h3>
+            </div>
+        `;
+        const printFooterHtml = `
+            <div class="print-page-footer hidden-in-web">
+                <div style="text-align: left; font-weight: bold;">Fatih AVCI<br>Psikolojik Danışman</div>
+                <div style="text-align: right; font-weight: bold;">EKAL REHBERLİK SERVİSİ</div>
+            </div>
+        `;
         
         // --- 1. BUGÜNÜN HEDEFLERİ (Aktif Görevler) ---
         const todayCard = document.createElement('div');
         todayCard.className = 'day-card';
-        todayCard.innerHTML = `<div class="day-header" style="background-color: var(--primary-color);"><h3 style="color: white;">Bugünün Hedefleri (Aktif)</h3></div>`;
+        todayCard.innerHTML = printHeaderHtml + `<div class="day-header" style="background-color: var(--primary-color);"><h3 style="color: white;">Aktif Konular</h3></div>`;
         const todayUl = document.createElement('ul');
         todayUl.className = 'task-list';
         
+        let activeTopics = [];
         if (studentData.todayTasks && studentData.todayTasks.length > 0) {
-            studentData.todayTasks.forEach(task => {
+            activeTopics = studentData.todayTasks.filter(t => !t.text.includes('Paragraf') && !t.text.includes('Problem') && !t.text.includes('Tekrar Testi') && t.tag !== 'deneme');
+        }
+        
+        if (activeTopics.length > 0) {
+            activeTopics.forEach(task => {
                 const li = document.createElement('li');
                 li.className = 'task-item';
                 
@@ -1226,12 +1323,13 @@ document.addEventListener('DOMContentLoaded', () => {
             todayUl.innerHTML = '<li style="color: #64748b; font-size: 0.9rem; text-align: center; border:none; padding:1rem;">Bugün için planlanmış aktif görev yok.</li>';
         }
         todayCard.appendChild(todayUl);
+        todayCard.insertAdjacentHTML('beforeend', printFooterHtml);
         container.appendChild(todayCard);
 
         // --- 2. SIRADAKİ KONULAR (Hedef Kuyruğu) ---
         const queueCard = document.createElement('div');
         queueCard.className = 'day-card';
-        queueCard.innerHTML = `<div class="day-header" style="background-color: #f59e0b;"><h3 style="color: white;">Sıradaki Konular (Kuyruk)</h3></div>`;
+        queueCard.innerHTML = printHeaderHtml + `<div class="day-header" style="background-color: #f59e0b;"><h3 style="color: white;">Gelecek (Kuyruktaki) Konular</h3></div>`;
         const queueUl = document.createElement('ul');
         queueUl.className = 'task-list';
         
@@ -1260,45 +1358,65 @@ document.addEventListener('DOMContentLoaded', () => {
             queueUl.innerHTML = '<li style="color: #64748b; font-size: 0.9rem; text-align: center; border:none; padding:1rem;">Kuyrukta konu kalmadı.</li>';
         }
         queueCard.appendChild(queueUl);
+        queueCard.insertAdjacentHTML('beforeend', printFooterHtml);
         container.appendChild(queueCard);
 
-        // --- 3. HAFTALIK SABİTLER (Denemeler ve Rutinler) ---
+        // --- 3. HAFTALIK SABİTLER (Günlük Rutinler Takvimi) ---
         const routineCard = document.createElement('div');
         routineCard.className = 'day-card';
-        routineCard.innerHTML = `<div class="day-header" style="background-color: #10b981;"><h3 style="color: white;">Haftalık Sabitler</h3></div>`;
-        const routineUl = document.createElement('ul');
-        routineUl.className = 'task-list';
+        routineCard.innerHTML = printHeaderHtml + `<div class="day-header" style="background-color: #10b981;"><h3 style="color: white;">Günlük Rutinler</h3></div>`;
         
-        let routineHtml = '';
-        if (s.paraGoal > 0) routineHtml += `<li class="task-item"><div class="task-text">Her Gün: ${s.paraGoal} Paragraf</div><span class="tag tag-tyt">TYT</span></li>`;
-        if (s.probGoal > 0) routineHtml += `<li class="task-item"><div class="task-text">Her Gün: ${s.probGoal} Problem</div><span class="tag tag-tyt">TYT</span></li>`;
+        const calendarGrid = document.createElement('div');
+        calendarGrid.className = 'calendar-grid';
         
-        // Get exams for the next 7 days
-        let examsFound = false;
         for(let dayOffset=0; dayOffset<7; dayOffset++) {
             const dayDate = new Date();
             dayDate.setDate(dayDate.getDate() + dayOffset); 
             const dateStr = dayDate.toLocaleDateString('tr-TR', { weekday: 'long' });
             
+            const col = document.createElement('div');
+            col.className = 'calendar-col';
+            col.innerHTML = `<div class="calendar-col-header">${dateStr}</div>`;
+            
+            const ul = document.createElement('ul');
+            ul.className = 'task-list';
+            
             const futureExams = getExamsForDate(dayDate);
+            const hasGeneral = futureExams.some(e => e.isGeneral);
+            const hasTurkce = futureExams.some(e => e.text.toLowerCase().includes('türkçe'));
+
+            if (!hasGeneral) {
+                if (s.paraGoal > 0 && !hasTurkce) ul.innerHTML += `<li class="task-item"><div class="task-text">${s.paraGoal} Paragraf</div><span class="tag tag-tyt" style="margin-left:auto;">TYT</span></li>`;
+                if (s.probGoal > 0) ul.innerHTML += `<li class="task-item"><div class="task-text">${s.probGoal} Problem</div><span class="tag tag-tyt" style="margin-left:auto;">TYT</span></li>`;
+            }
+            
             futureExams.forEach(exam => {
-                examsFound = true;
-                routineHtml += `<li class="task-item">
+                ul.innerHTML += `<li class="task-item">
                     <div style="flex-grow: 1;">
-                        <span style="font-weight: bold; color: #10b981;">${dateStr}:</span> 
-                        <span class="task-text">${exam.text}</span>
+                        <span class="task-text" style="font-size:0.8rem;">${exam.text}</span>
                     </div>
-                    <span class="tag tag-${exam.tag}">${exam.tag.toUpperCase()}</span>
+                    <span class="tag tag-${exam.tag}" style="margin-left:auto; font-size:0.7rem;">${exam.tag.toUpperCase()}</span>
                 </li>`;
+                if (exam.isGeneral) {
+                    ul.innerHTML += `<li class="task-item">
+                        <div style="flex-grow: 1;">
+                            <span class="task-text" style="font-size:0.8rem;">Deneme Değerlendirmesi</span>
+                        </div>
+                        <span class="tag tag-deneme" style="margin-left:auto; font-size:0.7rem;">DENEME</span>
+                    </li>`;
+                }
             });
+            
+            if (ul.innerHTML === '') {
+                ul.innerHTML = '<li style="color: #64748b; font-size: 0.8rem; text-align: center; border:none; padding:0.5rem;">Görev yok</li>';
+            }
+            
+            col.appendChild(ul);
+            calendarGrid.appendChild(col);
         }
         
-        if (!examsFound && routineHtml === '') {
-            routineHtml = '<li style="color: #64748b; font-size: 0.9rem; text-align: center; border:none; padding:1rem;">Haftalık sabit bir görev bulunmuyor.</li>';
-        }
-        
-        routineUl.innerHTML = routineHtml;
-        routineCard.appendChild(routineUl);
+        routineCard.appendChild(calendarGrid);
+        routineCard.insertAdjacentHTML('beforeend', printFooterHtml);
         container.appendChild(routineCard);
 
         const dateRangeEl = document.getElementById('pdf-date-range');

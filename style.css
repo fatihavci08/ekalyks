@@ -388,7 +388,7 @@ input[type=range]::-webkit-slider-thumb {
 
 .program-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    grid-template-columns: 1fr;
     gap: 1.5rem;
     margin-bottom: 2rem;
 }
@@ -637,13 +637,60 @@ input[type=range]::-webkit-slider-thumb {
     color: #38bdf8; /* Light Blue */
     font-weight: bold;
     font-size: 0.9rem;
+}/* Calendar Grid for Routines */
+.calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 10px;
+    margin-top: 15px;
+}
+.calendar-col {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    overflow: hidden;
+}
+.calendar-col-header {
+    background: #10b981;
+    color: white;
+    text-align: center;
+    padding: 8px;
+    font-weight: bold;
+    font-size: 0.9rem;
+}
+.calendar-col .task-list {
+    padding: 5px;
+    list-style: none;
+    margin: 0;
+}
+.calendar-col .task-item {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 8px;
+    margin-bottom: 5px;
+    gap: 5px;
+    border-bottom: 1px solid #e2e8f0;
+}
+.calendar-col .task-item:last-child {
+    border-bottom: none;
+}
+
+@media (max-width: 768px) {
+    .calendar-grid {
+        grid-template-columns: 1fr; /* Stack vertically on small screens */
+    }
 }
 
 @media print {
     @page {
-        size: A4 landscape;
+        size: portrait; /* Aktif Konular and Kuyruk are portrait */
         margin: 10mm;
     }
+    
+    @page landscapePage {
+        size: landscape; /* Weekly routines are landscape */
+    }
+
     body, .app-container {
         background: white !important;
         margin: 0 !important;
@@ -676,19 +723,88 @@ input[type=range]::-webkit-slider-thumb {
         display: none !important;
     }
 
-    /* Print 3-column Grid for Kanban */
+    /* Print 1 column per page for 3 separate pages */
     #pdf-content .program-grid {
-        display: grid !important;
-        grid-template-columns: 1fr 1fr 1fr !important;
-        gap: 15px !important;
+        display: block !important;
         width: 100% !important;
     }
     
     .day-card {
-        break-inside: avoid !important; /* Keep day blocks intact */
+        width: 100% !important;
+        height: 98vh !important; /* Force to take full height of the printed page */
+        display: flex !important;
+        flex-direction: column !important;
+        break-inside: avoid !important;
+        border: 2px solid #1e293b !important;
+        border-radius: 8px !important;
+        padding: 20px !important;
+        background: #f8fafc !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        page-break-after: always !important;
+        margin-bottom: 0 !important;
+        box-sizing: border-box !important;
+    }
+
+    .day-card:last-child {
+        page-break-after: auto !important;
+        page: landscapePage; /* Force the 3rd page to be landscape */
+    }
+
+    .print-page-header {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        text-align: center !important;
+        margin-bottom: 20px !important;
+        padding-bottom: 10px !important;
+        border-bottom: 2px solid #e2e8f0 !important;
+    }
+    
+    .print-page-header h2 {
+        font-size: 18px !important;
+        color: #0f172a !important;
+        margin: 0 0 5px 0 !important;
+        font-weight: 800 !important;
+    }
+    
+    .print-page-header h3 {
+        font-size: 14px !important;
+        color: #475569 !important;
+        margin: 0 !important;
+        font-weight: 600 !important;
+    }
+
+    .print-page-footer {
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: flex-end !important;
+        margin-top: auto !important; /* Pushes footer to the bottom */
+        padding-top: 15px !important;
+        border-top: 2px solid #e2e8f0 !important;
+        font-size: 12px !important;
+        color: #334155 !important;
+    }
+    
+    .print-page-footer div {
+        line-height: 1.4 !important;
+    }
+    
+    .calendar-grid {
+        display: grid !important;
+        grid-template-columns: repeat(7, 1fr) !important; /* 7 columns horizontally when printing */
+        gap: 5px !important;
+    }
+    
+    .calendar-col {
         border: 1px solid #000 !important;
-        padding: 10px !important;
-        background: white !important;
+    }
+
+    .calendar-col-header {
+        color: black !important;
+        border-bottom: 1px solid #000 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
     }
 
     .day-header h3 {
