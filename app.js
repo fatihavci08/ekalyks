@@ -396,13 +396,12 @@ document.addEventListener('DOMContentLoaded', () => {
         let cats = ['tyt'];
         if(track === 'say') cats.push('aytSayisal');
         else if(track === 'ea') cats.push('aytEa');
-        else if(track === 'soz') cats.push('aytEa', 'aytSozel');
+        else if(track === 'soz') cats.push('aytSozel');
         else if(track === 'dil') cats.push('ydt');
 
         cats.forEach(cat => {
             const catData = YKS_TOPICS[cat];
             for(let subject in catData) {
-                if(track === 'soz' && cat === 'aytEa' && subject !== 'Edebiyat') continue;
                 const topics = catData[subject];
                 
                 const item = document.createElement('div');
